@@ -2,7 +2,7 @@
 
 local UI = {}
 
--- Colours
+-- Colors
 local COL_HUD_BG   = {0.05, 0.05, 0.05, 0.85}
 local COL_WHITE    = {1,    1,    1}
 local COL_YELLOW   = {1,    0.85, 0.1}
@@ -23,7 +23,7 @@ end
 
 -- ─── HUD ────────────────────────────────────────────────────────────────────
 
-function UI.drawHUD(score, timeLeft)
+function UI.drawHUD(score, timeLeft, isOvertime)
     -- Background strip
     love.graphics.setColor(COL_HUD_BG)
     love.graphics.rectangle("fill", 0, 0, 800, 50)
@@ -42,14 +42,21 @@ function UI.drawHUD(score, timeLeft)
     love.graphics.setColor(COL_BLUE)
     love.graphics.print("P2", 760, 16)
 
-    -- Timer
-    local mins = math.floor(timeLeft / 60)
-    local secs = math.floor(timeLeft % 60)
-    local timeStr = string.format("%d:%02d", mins, secs)
+    -- Timer / overtime indicator
     love.graphics.setFont(fontMedium)
-    love.graphics.setColor(timeLeft <= 10 and COL_YELLOW or COL_WHITE)
-    local ttw = fontMedium:getWidth(timeStr)
-    love.graphics.print(timeStr, 800 - ttw - 20, 14)
+    if isOvertime then
+        love.graphics.setColor(COL_YELLOW)
+        local otStr = "OVERTIME"
+        local otw = fontMedium:getWidth(otStr)
+        love.graphics.print(otStr, 800 - otw - 20, 14)
+    else
+        local mins = math.floor(timeLeft / 60)
+        local secs = math.floor(timeLeft % 60)
+        local timeStr = string.format("%d:%02d", mins, secs)
+        love.graphics.setColor(timeLeft <= 10 and COL_YELLOW or COL_WHITE)
+        local ttw = fontMedium:getWidth(timeStr)
+        love.graphics.print(timeStr, 800 - ttw - 20, 14)
+    end
 end
 
 -- ─── Goal flash ─────────────────────────────────────────────────────────────

@@ -50,8 +50,15 @@ MENU  ──(Enter)──►  PLAYING  ──(P)──►  PAUSED
                       │                   │
                    (timer=0)           (P/R)
                       │                   │
-                      ▼                   ▼
-                  GAME_OVER          PLAYING / MENU
+                  (if draw)          PLAYING / MENU
+                      │
+                      ▼
+                  OVERTIME  ──(goal)──►  GAME_OVER
+                      │
+                   (no draw)
+                      │
+                      ▼
+                  GAME_OVER
 ```
 
 ---
@@ -71,6 +78,7 @@ MENU  ──(Enter)──►  PLAYING  ──(P)──►  PAUSED
 - [x] `src/player.lua` – player movement and kick
 - [x] `src/goal.lua` – goal detection and score increment
 - [x] `src/game.lua` – tie everything together in update/draw
+- [x] Sudden-death overtime when match ends in a draw
 
 ### Phase 3 – UI & Polish ✅
 - [x] `src/ui.lua` – score display, countdown timer
