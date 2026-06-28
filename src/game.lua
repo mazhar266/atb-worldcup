@@ -110,6 +110,10 @@ function Game.update(dt)
 
     elseif state == STATE_GOAL then
         goalFlashTimer = goalFlashTimer - dt
+        -- Players are frozen during the goal flash, but let the sub-flash ring
+        -- keep fading so it doesn't hang on screen for the whole freeze.
+        player1:tickFlash(dt)
+        player2:tickFlash(dt)
         if goalFlashTimer <= 0 then
             -- In overtime a goal ends the match; in normal time reset and play on
             if isOvertime then
@@ -141,6 +145,7 @@ function Game.draw()
 
     -- Draw HUD
     UI.drawHUD(Goal.score, timeLeft, isOvertime)
+    UI.drawStamina(player1, player2)
 
     -- Overlays
     if state == STATE_GOAL then
@@ -170,6 +175,10 @@ function Game.keypressed(key)
         -- Kick keys
         if key == "f" then player1:kick(ball) end
         if key == "l" then player2:kick(ball) end
+
+        -- Substitution keys (only for human-controlled teams)
+        if key == "q" and player1.control ~= "ai" then player1:substitute() end
+        if key == "k" and player2.control ~= "ai" then player2:substitute() end
 
         if key == "p"      then state = STATE_PAUSED end
         if key == "escape" then state = STATE_MENU end

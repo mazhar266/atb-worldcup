@@ -13,18 +13,40 @@ game that ATB colleagues can enjoy during breaks.
 ### Core Concept
 
 - Top-down 2D football pitch
-- Two teams of one player each (1v1)
+- Two teams, each with a **3-player squad**: one player on the pitch, two on the bench
 - Kick the ball into the opponent's goal to score
 - 90-second match; highest score wins
 - If tied at full time, sudden-death overtime (first goal wins)
+
+### Stamina & Substitutions
+
+The on-pitch player is the only member controlled at any time. Fatigue turns
+squad rotation into the core strategic layer:
+
+- The active player has a **stamina** value (0–100). It drains faster while
+  moving and a flat amount per kick; it ticks down slowly even while standing.
+- Low stamina **slows movement** (down to ~55% speed at empty) and **weakens
+  kicks** (down to ~60% power at empty).
+- Pressing the **substitute** key swaps the active player for the freshest
+  player on the bench. The pitch position is kept, so control is seamless.
+- Benched players **recover stamina** while resting. A short cooldown
+  (~1.2 s) prevents spamming substitutions.
+- The AI manages its own fitness: it automatically subs a tired player off when
+  a sufficiently rested replacement is available.
+
+**Tuning constants** (in `src/player.lua`): squad size 3 · move-drain 5/s ·
+idle-drain 1.5/s · kick cost 8 · kick cooldown 0.3 s · bench regen 6/s ·
+sub cooldown 1.2 s · min speed 55% · min kick 60%.
 
 ### Visual Style
 
 - Simple solid-color geometric shapes (no sprites required to run)
 - Green pitch with white lines
-- Red circle = Player 1, Blue circle = Player 2
+- Red circle = Team 1's active player, Blue circle = Team 2's active player
+  (the circle is shaded slightly per squad member and shows the jersey number)
 - White/yellow circle = Ball
 - White rectangles = Goals
+- Stamina bar + bench pips for each team in the top corners of the pitch
 
 ---
 
@@ -39,9 +61,9 @@ game that ATB colleagues can enjoy during breaks.
 | `src/game.lua`    | Game state machine (menu → playing → paused → over) |
 | `src/field.lua`   | Draw pitch, centre circle, halfway line, goal boxes |
 | `src/ball.lua`    | Ball position, velocity, friction, wall bouncing    |
-| `src/player.lua`  | Player movement, kick mechanic, simple AI logic     |
+| `src/player.lua`  | Squad roster, movement, kick, stamina, substitutions, AI |
 | `src/goal.lua`    | Goal zone rectangles, collision detection, scoring  |
-| `src/ui.lua`      | HUD (score, timer), menu screen, game-over screen   |
+| `src/ui.lua`      | HUD (score, timer, stamina), menu screen, game-over screen |
 
 ### Game States
 
@@ -86,17 +108,29 @@ MENU  ──(Enter)──►  PLAYING  ──(P)──►  PAUSED
 - [x] Game-over screen (winner announcement, restart prompt)
 - [x] Pause overlay
 
-### Phase 4 – AI Opponent (Future)
-- [ ] Simple rule-based AI: move toward ball, kick when close
-- [ ] Difficulty selector on menu (Easy / Medium / Hard)
+### Phase 4 – Squad & Substitutions ✅
+- [x] 3-player squad per team with per-member stamina (`src/player.lua`)
+- [x] Stamina drains while moving/kicking; fatigue scales speed and kick power
+- [x] `Player:substitute()` swaps in the freshest bench player (with cooldown)
+- [x] Bench players recover stamina while resting
+- [x] AI auto-substitutes tired players for rested ones
+- [x] Stamina bars, bench pips, and sub-key hints in the HUD (`src/ui.lua`)
+- [x] `Q` / `K` substitution keys wired into the game loop (`src/game.lua`)
 
-### Phase 5 – Audio & Assets (Future)
+### Phase 5 – AI Opponent (Future)
+- [ ] Smarter rule-based AI: positioning, defending, anticipating the ball
+- [ ] Difficulty selector on menu (Easy / Medium / Hard)
+- [ ] Optional sprint key (hold to move faster, drains stamina quicker)
+- [ ] Limited substitution count per match (more sim-like)
+
+### Phase 6 – Audio & Assets (Future)
 - [ ] Kick sound effect
 - [ ] Goal celebration sound
+- [ ] Substitution / whistle sound
 - [ ] Background music loop
 - [ ] Optional sprite sheet for players and ball
 
-### Phase 6 – Packaging (Future)
+### Phase 7 – Packaging (Future)
 - [ ] Bundle into `.love` archive for easy distribution
 - [ ] Build scripts for Windows / macOS / Linux executables
 
@@ -134,6 +168,7 @@ MENU  ──(Enter)──►  PLAYING  ──(P)──►  PAUSED
 | Move Left     | A          | ← Left Arrow    |
 | Move Right    | D          | → Right Arrow   |
 | Kick          | F          | L               |
+| Substitute    | Q          | K               |
 
 | Global        | Key         |
 |---------------|-------------|
@@ -154,6 +189,18 @@ MENU  ──(Enter)──►  PLAYING  ──(P)──►  PAUSED
 - **Ball friction**: Ball velocity multiplied by `0.98` each frame (60 fps)
 - **Wall bounce**: Ball reflects off field boundary walls; goals pass through
   the goal opening
+- **Stamina**: Per-member value 0–100. The active member drains
+  `DRAIN_MOVE`/s while moving (`DRAIN_IDLE`/s otherwise) plus `KICK_COST` per
+  kick; bench members regenerate `REGEN_BENCH`/s. Speed and kick power scale
+  linearly with the active member's stamina fraction (floored at
+  `MIN_SPEED_MUL` / `MIN_KICK_MUL`). Stamina **persists** across goal kickoffs
+  and into overtime — only `Player:reset()` repositions, it never refills.
+- **Substitution**: `Player:substitute()` selects the highest-stamina bench
+  member and makes it active in the same pitch slot, gated by `SUB_COOLDOWN`.
+- **Kick cooldown**: `Player:kick()` is gated by `KICK_COOLDOWN` so a kick is a
+  discrete action. The AI auto-kicks every frame it is near the ball; without
+  the cooldown the per-kick stamina cost would be paid every frame and drain a
+  full bar in a fraction of a second.
 
 ---
 
@@ -164,6 +211,7 @@ MENU  ──(Enter)──►  PLAYING  ──(P)──►  PAUSED
 | Project skeleton   | Week 1       | ✅ Done     |
 | Playable prototype | Week 2       | ✅ Done     |
 | Polished v1.0      | Week 3       | ✅ Done     |
-| AI opponent        | Week 4       | 🔲 Planned  |
+| Squad & subs       | Week 4       | ✅ Done     |
+| AI opponent        | Week 5       | 🔲 Planned  |
 | Audio integration  | Week 5       | 🔲 Planned  |
 | Packaged release   | Week 6       | 🔲 Planned  |

@@ -6,9 +6,12 @@ An arcade-style 2D football game built with [LÖVE2D](https://love2d.org/) (Love
 
 - Arcade-style 2D football (soccer) gameplay
 - 2-player local versus mode or 1-player vs AI
+- **Squad & substitutions** — each team has a 3-player squad (1 on the pitch, 2 on the bench)
+- **Stamina system** — the active player tires while running and kicking; tired players move slower and kick weaker
+- **Fresh legs** — substitute the active player for a rested one on the bench; benched players recover stamina (the AI manages its own subs too)
 - Simple ball physics with velocity and friction
 - Goal detection and score tracking
-- 90-second match timer
+- 90-second match timer with sudden-death overtime
 - Pause and restart support
 
 ## Requirements
@@ -44,6 +47,11 @@ An arcade-style 2D football game built with [LÖVE2D](https://love2d.org/) (Love
 | Move Left     | `A`              | `←` (Left Arrow)      |
 | Move Right    | `D`              | `→` (Right Arrow)     |
 | Kick Ball     | `F`              | `L`                   |
+| Substitute    | `Q`              | `K`                   |
+
+> **Tip:** Watch the stamina bar at the top of your half. Sub on a fresh player
+> (`Q` / `K`) when you start to tire — the player you bring off recovers stamina
+> while resting on the bench. There's a short cooldown between substitutions.
 
 ### Menu / Global
 
