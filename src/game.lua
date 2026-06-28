@@ -9,11 +9,12 @@ local UI     = require("src.ui")
 local Game = {}
 
 -- ─── State constants ─────────────────────────────────────────────────────────
-local STATE_MENU     = "menu"
-local STATE_PLAYING  = "playing"
-local STATE_PAUSED   = "paused"
-local STATE_GOAL     = "goal"      -- brief freeze after a goal
-local STATE_GAMEOVER = "gameover"
+local STATE_MENU      = "menu"
+local STATE_PLAYING   = "playing"
+local STATE_OVERTIME  = "overtime"   -- sudden-death extra time
+local STATE_PAUSED    = "paused"
+local STATE_GOAL      = "goal"       -- brief freeze after a goal
+local STATE_GAMEOVER  = "gameover"
 
 -- ─── Configuration ───────────────────────────────────────────────────────────
 local MATCH_TIME    = 90    -- seconds per match
@@ -25,6 +26,7 @@ local ball
 local player1
 local player2
 local timeLeft
+local isOvertime
 local goalFlashTimer
 local lastScoringTeam
 local menuOption    -- 1 = vs AI, 2 = 2 player
@@ -39,17 +41,18 @@ end
 
 local function startMatch(option)
     Goal.reset()
-    ball    = Ball.new()
+    ball       = Ball.new()
+    isOvertime = false
     createPlayers(option or menuOption)
     timeLeft = MATCH_TIME
-    state   = STATE_PLAYING
+    state    = STATE_PLAYING
 end
 
 local function resetAfterGoal()
     ball:reset()
     player1:reset()
     player2:reset()
-    state = STATE_PLAYING
+    state = isOvertime and STATE_OVERTIME or STATE_PLAYING
 end
 
 -- ─── Love2D callbacks ────────────────────────────────────────────────────────
@@ -66,11 +69,20 @@ function Game.update(dt)
         timeLeft = timeLeft - dt
         if timeLeft <= 0 then
             timeLeft = 0
-            state = STATE_GAMEOVER
+            -- Tied → go to sudden-death overtime; otherwise end match
+            if Goal.score[1] == Goal.score[2] then
+                isOvertime = true
+                state = STATE_OVERTIME
+                ball:reset()
+                player1:reset()
+                player2:reset()
+            else
+                state = STATE_GAMEOVER
+            end
             return
         end
 
-        -- Update ball and players
+        -- Update entities
         ball:update(dt)
         player1:update(dt, ball)
         player2:update(dt, ball)
@@ -83,10 +95,28 @@ function Game.update(dt)
             state = STATE_GOAL
         end
 
+    elseif state == STATE_OVERTIME then
+        -- No countdown in overtime; first goal wins
+        ball:update(dt)
+        player1:update(dt, ball)
+        player2:update(dt, ball)
+
+        local scorer = Goal.check(ball)
+        if scorer then
+            lastScoringTeam = scorer
+            goalFlashTimer  = GOAL_FREEZE
+            state = STATE_GOAL
+        end
+
     elseif state == STATE_GOAL then
         goalFlashTimer = goalFlashTimer - dt
         if goalFlashTimer <= 0 then
-            resetAfterGoal()
+            -- In overtime a goal ends the match; in normal time reset and play on
+            if isOvertime then
+                state = STATE_GAMEOVER
+            else
+                resetAfterGoal()
+            end
         end
     end
 end
@@ -110,7 +140,7 @@ function Game.draw()
     player2:draw()
 
     -- Draw HUD
-    UI.drawHUD(Goal.score, timeLeft)
+    UI.drawHUD(Goal.score, timeLeft, isOvertime)
 
     -- Overlays
     if state == STATE_GOAL then
@@ -136,7 +166,7 @@ function Game.keypressed(key)
         end
         if key == "escape" then love.event.quit() end
 
-    elseif state == STATE_PLAYING then
+    elseif state == STATE_PLAYING or state == STATE_OVERTIME then
         -- Kick keys
         if key == "f" then player1:kick(ball) end
         if key == "l" then player2:kick(ball) end
@@ -145,7 +175,9 @@ function Game.keypressed(key)
         if key == "escape" then state = STATE_MENU end
 
     elseif state == STATE_PAUSED then
-        if key == "p"      then state = STATE_PLAYING end
+        if key == "p"      then
+            state = isOvertime and STATE_OVERTIME or STATE_PLAYING
+        end
         if key == "r"      then startMatch() end
         if key == "escape" then state = STATE_MENU end
 
