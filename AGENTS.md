@@ -13,7 +13,8 @@ Key gameplay systems:
 - **Stamina system**: the active player tires while moving, idling, and kicking. Low stamina reduces movement speed and kick power.
 - **Substitutions**: swap the active player for the freshest bench player (`Q` for Player 1, `K` for Player 2). Bench players recover stamina while resting.
 - **Match timer**: 90-second regulation; if the score is tied, sudden-death overtime begins (first goal wins).
-- All rendering uses simple geometric shapes (circles, rectangles, lines) and no external image/audio assets.
+- Generated pixel-art sprites live in `assets/` and are loaded by `src/assets.lua`. Rendering falls back to simple geometric shapes if the sprites are missing.
+- Generated sound effects live in `assets/sfx/` and are loaded/played via `src/audio.lua`. Missing sounds are skipped silently.
 
 License: MIT (`LICENSE`).
 
@@ -38,7 +39,18 @@ atb-worldcup/
 │   ├── ball.lua      # Ball entity: position, velocity, friction, wall bouncing
 │   ├── player.lua    # Player entity: squad roster, movement, kick, stamina, substitutions, simple AI
 │   ├── goal.lua      # Goal zone detection and score state
-│   └── ui.lua        # HUD, menu, pause overlay, goal flash, game-over screen
+│   ├── ui.lua        # HUD, menu, pause overlay, goal flash, game-over screen
+│   ├── assets.lua    # Central sprite loader with fallback to shape rendering
+│   └── audio.lua     # Sound effect loader/playback helpers
+├── assets/           # Generated PNG sprites and WAV sound effects
+│   ├── sfx/          # WAV sound effects (kick, bounce, goal, whistle, substitute)
+│   ├── ball.png      # Soccer ball sprite
+│   ├── grass.png     # Pitch grass texture
+│   ├── title.png     # Menu title banner
+│   └── player_{red,blue}_{1..3}.png  # Squad shade variants
+├── tools/
+│   ├── generate_assets.py  # Python/Pillow script that regenerates image assets
+│   └── generate_sfx.py     # Python/ffmpeg script that regenerates sound effects
 ├── docs/
 │   └── plan.md       # Full design document, controls reference, and implementation roadmap
 ├── README.md         # Human-facing quick start and controls

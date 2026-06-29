@@ -1,6 +1,8 @@
 -- src/ball.lua: Ball entity with simple physics
 
 local Field = require("src.field")
+local Assets = require("src.assets")
+local Audio  = require("src.audio")
 
 local Ball = {}
 Ball.__index = Ball
@@ -46,9 +48,11 @@ function Ball:update(dt)
     if self.y - self.radius < Field.y then
         self.y  = Field.y + self.radius
         self.vy = -self.vy
+        Audio.playBounce()
     elseif self.y + self.radius > Field.bottom then
         self.y  = Field.bottom - self.radius
         self.vy = -self.vy
+        Audio.playBounce()
     end
 
     -- Left wall bounce (only outside the goal opening)
@@ -57,6 +61,7 @@ function Ball:update(dt)
         if not inGoal then
             self.x  = Field.x + self.radius
             self.vx = -self.vx
+            Audio.playBounce()
         end
     end
 
@@ -66,11 +71,20 @@ function Ball:update(dt)
         if not inGoal then
             self.x  = Field.right - self.radius
             self.vx = -self.vx
+            Audio.playBounce()
         end
     end
 end
 
 function Ball:draw()
+    if Assets.ball then
+        local w, h = Assets.ball:getDimensions()
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(Assets.ball, self.x - w / 2, self.y - h / 2)
+        return
+    end
+
+    -- Fallback shape rendering
     -- Shadow
     love.graphics.setColor(0, 0, 0, 0.3)
     love.graphics.circle("fill", self.x + 3, self.y + 3, self.radius)

@@ -40,11 +40,10 @@ sub cooldown 1.2 s · min speed 55% · min kick 60%.
 
 ### Visual Style
 
-- Simple solid-color geometric shapes (no sprites required to run)
-- Green pitch with white lines
-- Red circle = Team 1's active player, Blue circle = Team 2's active player
-  (the circle is shaded slightly per squad member and shows the jersey number)
-- White/yellow circle = Ball
+- Generated pixel-art sprites with shape-based fallback (sprites live in `assets/` and are optional)
+- Green pitch with white lines and a subtle grass texture
+- Red/blue player sprites = active players (shaded per squad member, jersey number drawn on top)
+- Soccer ball sprite
 - White rectangles = Goals
 - Stamina bar + bench pips for each team in the top corners of the pitch
 
@@ -123,12 +122,10 @@ MENU  ──(Enter)──►  PLAYING  ──(P)──►  PAUSED
 - [ ] Optional sprint key (hold to move faster, drains stamina quicker)
 - [ ] Limited substitution count per match (more sim-like)
 
-### Phase 6 – Audio & Assets (Future)
-- [ ] Kick sound effect
-- [ ] Goal celebration sound
-- [ ] Substitution / whistle sound
+### Phase 6 – Audio & Assets
+- [x] Generated pixel-art sprites for ball, players, field grass, and menu banner (see `assets/` and `tools/generate_assets.py`)
+- [x] Synthetic SFX: kick, bounce, goal, substitution, whistle (see `assets/sfx/` and `tools/generate_sfx.py`)
 - [ ] Background music loop
-- [ ] Optional sprite sheet for players and ball
 
 ### Phase 7 – Packaging (Future)
 - [ ] Bundle into `.love` archive for easy distribution

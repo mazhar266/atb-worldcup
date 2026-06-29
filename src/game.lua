@@ -1,10 +1,12 @@
 -- src/game.lua: Game state machine and main orchestrator
 
-local Field  = require("src.field")
-local Ball   = require("src.ball")
-local Player = require("src.player")
-local Goal   = require("src.goal")
-local UI     = require("src.ui")
+local Field   = require("src.field")
+local Ball    = require("src.ball")
+local Player  = require("src.player")
+local Goal    = require("src.goal")
+local UI      = require("src.ui")
+local Assets  = require("src.assets")
+local Audio   = require("src.audio")
 
 local Game = {}
 
@@ -46,6 +48,7 @@ local function startMatch(option)
     createPlayers(option or menuOption)
     timeLeft = MATCH_TIME
     state    = STATE_PLAYING
+    Audio.playWhistle()
 end
 
 local function resetAfterGoal()
@@ -58,6 +61,8 @@ end
 -- ─── Love2D callbacks ────────────────────────────────────────────────────────
 
 function Game.load()
+    Assets.load()
+    Audio.load()
     UI.load()
     menuOption = 1
     state = STATE_MENU
@@ -76,6 +81,7 @@ function Game.update(dt)
                 ball:reset()
                 player1:reset()
                 player2:reset()
+                Audio.playWhistle()
             else
                 state = STATE_GAMEOVER
             end
@@ -93,6 +99,7 @@ function Game.update(dt)
             lastScoringTeam = scorer
             goalFlashTimer  = GOAL_FREEZE
             state = STATE_GOAL
+            Audio.playGoal()
         end
 
     elseif state == STATE_OVERTIME then
@@ -106,6 +113,7 @@ function Game.update(dt)
             lastScoringTeam = scorer
             goalFlashTimer  = GOAL_FREEZE
             state = STATE_GOAL
+            Audio.playGoal()
         end
 
     elseif state == STATE_GOAL then

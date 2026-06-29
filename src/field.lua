@@ -1,5 +1,7 @@
 -- src/field.lua: Football pitch rendering
 
+local Assets = require("src.assets")
+
 local Field = {}
 
 -- Field geometry (centred on 800x600 window)
@@ -29,8 +31,13 @@ local COL_GOAL    = {0.95, 0.95, 0.95}
 
 function Field.draw()
     -- Grass background
-    love.graphics.setColor(COL_GRASS)
-    love.graphics.rectangle("fill", Field.x, Field.y, Field.width, Field.height)
+    if Assets.grass then
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(Assets.grass, Field.x, Field.y)
+    else
+        love.graphics.setColor(COL_GRASS)
+        love.graphics.rectangle("fill", Field.x, Field.y, Field.width, Field.height)
+    end
 
     -- Border
     love.graphics.setColor(COL_LINE)

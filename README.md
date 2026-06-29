@@ -12,6 +12,8 @@ An arcade-style 2D football game built with [LÖVE2D](https://love2d.org/) (Love
 - Simple ball physics with velocity and friction
 - Goal detection and score tracking
 - 90-second match timer with sudden-death overtime
+- Pixel-art sprites for the ball, players, field, and menu banner
+- Synthetic sound effects (kick, bounce, goal, whistle, substitution)
 - Pause and restart support
 
 ## Requirements
@@ -74,11 +76,43 @@ atb-worldcup/
 │   ├── ball.lua      # Ball physics and rendering
 │   ├── player.lua    # Player entity, controls, and AI
 │   ├── goal.lua      # Goal zones and scoring
-│   └── ui.lua        # HUD, menus, and overlays
+│   ├── ui.lua        # HUD, menus, and overlays
+│   ├── assets.lua    # Central sprite loader
+│   └── audio.lua     # Sound effect loader
+├── assets/           # Generated PNG sprites and WAV sound effects
+│   └── sfx/          # WAV sound effects
+├── tools/
+│   ├── generate_assets.py  # Sprite generator script
+│   └── generate_sfx.py     # Sound effect generator script
 ├── docs/
 │   └── plan.md       # Project plan and design document
 ├── LICENSE
 └── README.md
+```
+
+## Assets
+
+The game ships with generated pixel-art sprites in `assets/` and sound effects in
+`assets/sfx/`. If the sprites are missing, the renderer falls back to the
+original geometric shapes; missing sounds are simply skipped.
+
+### Regenerate image assets
+
+Requires Python 3 and Pillow:
+
+```bash
+python3 -m venv .venv-assets
+source .venv-assets/bin/activate  # On Windows: .venv-assets\Scripts\activate
+pip install Pillow
+python tools/generate_assets.py
+```
+
+### Regenerate sound effects
+
+Requires Python 3 and ffmpeg:
+
+```bash
+python tools/generate_sfx.py
 ```
 
 ## Documentation

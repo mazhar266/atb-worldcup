@@ -1,3 +1,7 @@
+# Python asset generation environment
+.venv-assets/
+__pycache__/
+
 # Compiled Lua sources
 luac.out
 

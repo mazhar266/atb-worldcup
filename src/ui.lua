@@ -1,6 +1,7 @@
 -- src/ui.lua: HUD, menu, pause overlay, and game-over screen
 
 local Field = require("src.field")
+local Assets = require("src.assets")
 
 local UI = {}
 
@@ -189,6 +190,13 @@ function UI.drawMenu(menuOption)
     -- Dark full-screen overlay
     love.graphics.setColor(0.05, 0.15, 0.05)
     love.graphics.rectangle("fill", 0, 0, 800, 600)
+
+    -- Title banner
+    if Assets.title then
+        local tw, th = Assets.title:getDimensions()
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(Assets.title, (800 - tw) / 2, 60)
+    end
 
     -- Title
     love.graphics.setFont(fontLarge)

@@ -1,6 +1,8 @@
 -- src/player.lua: Player entity, movement, kick, stamina, substitutions and simple AI
 
-local Field = require("src.field")
+local Field  = require("src.field")
+local Assets = require("src.assets")
+local Audio  = require("src.audio")
 
 local Player = {}
 Player.__index = Player
@@ -116,6 +118,7 @@ function Player:substitute()
     self.active      = benchIdx
     self.subCooldown = SUB_COOLDOWN
     self.subFlash    = 0.4
+    Audio.playSubstitute()
     return true
 end
 
@@ -234,6 +237,7 @@ function Player:kick(ball)
         local active = self:activeMember()
         active.stamina = math.max(0, active.stamina - KICK_COST)
         self.kickCooldown = KICK_COOLDOWN
+        Audio.playKick()
     end
 end
 
@@ -246,9 +250,7 @@ function Player:bodyColor()
 end
 
 function Player:draw()
-    -- Shadow
-    love.graphics.setColor(0, 0, 0, 0.25)
-    love.graphics.circle("fill", self.x + 3, self.y + 4, self.radius)
+    local sprite = Assets.playerSprite(self.team, self.active)
 
     -- Substitution pulse ring
     if self.subFlash > 0 then
@@ -257,14 +259,26 @@ function Player:draw()
         love.graphics.circle("line", self.x, self.y, self.radius + 6 + (0.4 - self.subFlash) * 20)
     end
 
-    -- Body
-    love.graphics.setColor(self:bodyColor())
-    love.graphics.circle("fill", self.x, self.y, self.radius)
+    if sprite then
+        local w, h = sprite:getDimensions()
+        -- Shade variants per active roster slot make substitutions visible.
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.draw(sprite, self.x - w / 2, self.y - h / 2)
+    else
+        -- Fallback shape rendering
+        -- Shadow
+        love.graphics.setColor(0, 0, 0, 0.25)
+        love.graphics.circle("fill", self.x + 3, self.y + 4, self.radius)
 
-    -- Outline
-    love.graphics.setColor(1, 1, 1, 0.7)
-    love.graphics.setLineWidth(2)
-    love.graphics.circle("line", self.x, self.y, self.radius)
+        -- Body
+        love.graphics.setColor(self:bodyColor())
+        love.graphics.circle("fill", self.x, self.y, self.radius)
+
+        -- Outline
+        love.graphics.setColor(1, 1, 1, 0.7)
+        love.graphics.setLineWidth(2)
+        love.graphics.circle("line", self.x, self.y, self.radius)
+    end
 
     -- Jersey number of the active member
     love.graphics.setColor(1, 1, 1)
