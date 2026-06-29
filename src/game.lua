@@ -41,6 +41,33 @@ local function createPlayers(option)
     player2 = Player.new(2, p2control)
 end
 
+-- ─── Audio scenes ──────────────────────────────────────────────────────────
+-- Theme music plays on the menu / results screens; the crowd ambience bed plays
+-- while a match is live. The movement loop only follows human players.
+
+local function audioMenu()
+    Audio.stopCrowd()
+    Audio.setMoving(false)
+    Audio.startTheme()
+end
+
+local function audioMatch()
+    Audio.stopTheme()
+    Audio.startCrowd()
+end
+
+local function audioGameOver()
+    Audio.stopCrowd()
+    Audio.setMoving(false)
+    Audio.playWhistle()   -- final whistle
+    Audio.startTheme()
+end
+
+local function updateMoveAudio()
+    Audio.setMoving((player1.control ~= "ai" and player1.moving)
+                 or (player2.control ~= "ai" and player2.moving))
+end
+
 local function startMatch(option)
     Goal.reset()
     ball       = Ball.new()
@@ -48,6 +75,8 @@ local function startMatch(option)
     createPlayers(option or menuOption)
     timeLeft = MATCH_TIME
     state    = STATE_PLAYING
+    audioMatch()
+    Audio.playStart()
     Audio.playWhistle()
 end
 
@@ -66,6 +95,7 @@ function Game.load()
     UI.load()
     menuOption = 1
     state = STATE_MENU
+    audioMenu()
 end
 
 function Game.update(dt)
@@ -84,6 +114,7 @@ function Game.update(dt)
                 Audio.playWhistle()
             else
                 state = STATE_GAMEOVER
+                audioGameOver()
             end
             return
         end
@@ -92,6 +123,7 @@ function Game.update(dt)
         ball:update(dt)
         player1:update(dt, ball)
         player2:update(dt, ball)
+        updateMoveAudio()
 
         -- Check for goals
         local scorer = Goal.check(ball)
@@ -100,6 +132,7 @@ function Game.update(dt)
             goalFlashTimer  = GOAL_FREEZE
             state = STATE_GOAL
             Audio.playGoal()
+            Audio.setMoving(false)
         end
 
     elseif state == STATE_OVERTIME then
@@ -107,6 +140,7 @@ function Game.update(dt)
         ball:update(dt)
         player1:update(dt, ball)
         player2:update(dt, ball)
+        updateMoveAudio()
 
         local scorer = Goal.check(ball)
         if scorer then
@@ -114,6 +148,7 @@ function Game.update(dt)
             goalFlashTimer  = GOAL_FREEZE
             state = STATE_GOAL
             Audio.playGoal()
+            Audio.setMoving(false)
         end
 
     elseif state == STATE_GOAL then
@@ -126,6 +161,7 @@ function Game.update(dt)
             -- In overtime a goal ends the match; in normal time reset and play on
             if isOvertime then
                 state = STATE_GAMEOVER
+                audioGameOver()
             else
                 resetAfterGoal()
             end
@@ -188,21 +224,35 @@ function Game.keypressed(key)
         if key == "q" and player1.control ~= "ai" then player1:substitute() end
         if key == "k" and player2.control ~= "ai" then player2:substitute() end
 
-        if key == "p"      then state = STATE_PAUSED end
-        if key == "escape" then state = STATE_MENU end
+        if key == "p"      then
+            state = STATE_PAUSED
+            Audio.stopCrowd()
+            Audio.setMoving(false)
+        end
+        if key == "escape" then
+            state = STATE_MENU
+            audioMenu()
+        end
 
     elseif state == STATE_PAUSED then
         if key == "p"      then
             state = isOvertime and STATE_OVERTIME or STATE_PLAYING
+            Audio.startCrowd()
         end
         if key == "r"      then startMatch() end
-        if key == "escape" then state = STATE_MENU end
+        if key == "escape" then
+            state = STATE_MENU
+            audioMenu()
+        end
 
     elseif state == STATE_GAMEOVER then
         if key == "return" or key == "kpenter" then
             startMatch()
         end
-        if key == "escape" then state = STATE_MENU end
+        if key == "escape" then
+            state = STATE_MENU
+            audioMenu()
+        end
     end
 end
 

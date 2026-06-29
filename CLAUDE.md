@@ -37,7 +37,7 @@ Inputs are only honored in the states where they make sense (e.g. kick/substitut
 The other `src/` modules split into two coexisting conventions — be consistent with whichever a file
 already uses:
 - **Metatable OOP** (`:new`, `__index`): `src/ball.lua`, `src/player.lua` — instantiated per match.
-- **Plain-table singletons**: `src/field.lua`, `src/goal.lua`, `src/ui.lua` — stateless-ish shared modules.
+- **Plain-table singletons**: `src/field.lua`, `src/goal.lua`, `src/ui.lua`, `src/assets.lua`, `src/audio.lua` — stateless-ish shared modules.
 
 `src/field.lua` is the **shared coordinate authority**: pitch/goal geometry (`x`, `y`, `right`, `bottom`,
 `cx`, `cy`, `goalTop`, `goalBottom`, `goalWidth`, …). `ball.lua`, `player.lua`, `goal.lua`, and `ui.lua`
@@ -49,6 +49,16 @@ that doesn't exist) — changing `Field.width`/`x` at runtime won't recompute th
 the goal openings. `src/goal.lua` holds the `score` table and `Goal.check(ball)` returns the scoring team.
 `src/ui.lua` is pure rendering (HUD, menu, pause, goal flash, game-over, stamina panel); fonts are created
 in `UI.load`.
+
+`src/assets.lua` loads PNG sprites from `assets/` (ball, players, grass, title) with graceful fallback to
+the geometric shapes when a sprite is missing. `src/audio.lua` loads/plays everything in `assets/sfx/`:
+looping **theme** music + **crowd** ambience beds, a **start** jingle, a human-only **move** loop, and
+one-shot effects (randomised `kick0-3`/`goal0-1`, bounce, whistle, substitute). It prefers **OGG** and
+falls back to the generated **WAV** placeholders (`tools/generate_sfx.py` only makes WAVs); every play call
+is a safe no-op if the file or audio device is missing. The **audio "scene" is driven by `game.lua`'s state
+machine** (theme on `menu`/`gameover`, crowd during play, move follows human players) — wire new transitions
+there, keep `audio.lua` as low-level play/stop primitives. `assets/sfx/theme.ogg.options` (`stream: true`)
+is just a hint that the large theme is loaded as a streaming source.
 
 ## Squad / stamina / substitution model (the main gameplay system)
 
@@ -72,6 +82,7 @@ position/velocity (`x`, `y`, `vx`, `vy`); its `roster` is an array of members `{
 - Each `src/*.lua` module returns one table and is loaded with `require("src.x")` (dot path).
 - Many UI coordinates are hardcoded against the fixed 800×600 window and a 50px top HUD strip; account for
   that when changing layout.
-- **Keep docs in sync with code.** `README.md` (controls/features) and `docs/plan.md` (design, phases,
-  tuning, controls) are treated as living docs and are expected to be updated in the same change as the
-  code — the git history has a dedicated "sync docs with code" commit and this norm is followed per feature.
+- **Keep docs in sync with code.** `README.md` (controls/features), `docs/plan.md` (design, phases,
+  tuning, controls), and `AGENTS.md` (agent notes) are treated as living docs and are expected to be
+  updated in the same change as the code — the git history has a dedicated "sync docs with code" commit
+  and this norm is followed per feature.

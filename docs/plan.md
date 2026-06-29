@@ -122,10 +122,19 @@ MENU  ──(Enter)──►  PLAYING  ──(P)──►  PAUSED
 - [ ] Optional sprint key (hold to move faster, drains stamina quicker)
 - [ ] Limited substitution count per match (more sim-like)
 
-### Phase 6 – Audio & Assets
+### Phase 6 – Audio & Assets ✅
 - [x] Generated pixel-art sprites for ball, players, field grass, and menu banner (see `assets/` and `tools/generate_assets.py`)
-- [x] Synthetic SFX: kick, bounce, goal, substitution, whistle (see `assets/sfx/` and `tools/generate_sfx.py`)
-- [ ] Background music loop
+- [x] SFX with randomised variants: kick (`kick0-3`), goal (`goal0-1`), bounce, substitution, whistle
+- [x] Looping background theme music (streamed `theme.ogg`) on the menu / results screens
+- [x] Crowd ambience bed during live play; kickoff jingle (`start.ogg`); footstep loop (`move.ogg`)
+- [x] OGG-first loader (`src/audio.lua`) with WAV fallbacks for cues that only exist as WAV
+
+#### Audio scene model
+The state machine drives the soundscape: theme music loops on `menu`/`gameover`,
+and on kickoff it stops the theme, starts the crowd bed, plays the start jingle +
+whistle. The crowd bed runs through `playing`/`overtime`/`goal`; pausing stops the
+crowd and movement loop and unpausing resumes them. The movement loop follows
+**human** players only (so the AI chasing the ball doesn't drone constantly).
 
 ### Phase 7 – Packaging (Future)
 - [ ] Bundle into `.love` archive for easy distribution
@@ -210,5 +219,5 @@ MENU  ──(Enter)──►  PLAYING  ──(P)──►  PAUSED
 | Polished v1.0      | Week 3       | ✅ Done     |
 | Squad & subs       | Week 4       | ✅ Done     |
 | AI opponent        | Week 5       | 🔲 Planned  |
-| Audio integration  | Week 5       | 🔲 Planned  |
+| Audio integration  | Week 5       | ✅ Done     |
 | Packaged release   | Week 6       | 🔲 Planned  |

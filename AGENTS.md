@@ -14,7 +14,7 @@ Key gameplay systems:
 - **Substitutions**: swap the active player for the freshest bench player (`Q` for Player 1, `K` for Player 2). Bench players recover stamina while resting.
 - **Match timer**: 90-second regulation; if the score is tied, sudden-death overtime begins (first goal wins).
 - Generated pixel-art sprites live in `assets/` and are loaded by `src/assets.lua`. Rendering falls back to simple geometric shapes if the sprites are missing.
-- Generated sound effects live in `assets/sfx/` and are loaded/played via `src/audio.lua`. Missing sounds are skipped silently.
+- Audio lives in `assets/sfx/` and is loaded/played via `src/audio.lua`: looping theme music + crowd ambience beds, a kickoff jingle, a human-only footstep loop, and one-shot effects (randomised `kick0-3` / `goal0-1`, bounce, whistle, substitute). The loader prefers OGG and falls back to the generated WAVs; missing sounds are skipped silently. The state machine in `src/game.lua` drives which beds play per state (theme on menu/gameover, crowd during play).
 
 License: MIT (`LICENSE`).
 
@@ -41,9 +41,9 @@ atb-worldcup/
 │   ├── goal.lua      # Goal zone detection and score state
 │   ├── ui.lua        # HUD, menu, pause overlay, goal flash, game-over screen
 │   ├── assets.lua    # Central sprite loader with fallback to shape rendering
-│   └── audio.lua     # Sound effect loader/playback helpers
-├── assets/           # Generated PNG sprites and WAV sound effects
-│   ├── sfx/          # WAV sound effects (kick, bounce, goal, whistle, substitute)
+│   └── audio.lua     # Music / sound effect loader and playback helpers
+├── assets/           # PNG sprites and audio
+│   ├── sfx/          # OGG music + effects (theme, start, crowd, move, kick0-3, goal0-1) + WAV fallbacks
 │   ├── ball.png      # Soccer ball sprite
 │   ├── grass.png     # Pitch grass texture
 │   ├── title.png     # Menu title banner

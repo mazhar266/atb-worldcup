@@ -176,6 +176,7 @@ function Player:update(dt, ball)
     -- Normalise diagonal movement and apply
     local len = math.sqrt(moveX * moveX + moveY * moveY)
     local isMoving = len > 0
+    self.moving = isMoving   -- read by the audio layer for the movement loop
     if isMoving then
         local spd = ((self.control == "ai") and AI_SPEED or SPEED) * speedMul
         self.x = self.x + (moveX / len) * spd * dt

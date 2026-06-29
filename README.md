@@ -13,7 +13,9 @@ An arcade-style 2D football game built with [LÖVE2D](https://love2d.org/) (Love
 - Goal detection and score tracking
 - 90-second match timer with sudden-death overtime
 - Pixel-art sprites for the ball, players, field, and menu banner
-- Synthetic sound effects (kick, bounce, goal, whistle, substitution)
+- **Full audio** — looping theme music on the menu, crowd ambience during play, a
+  kickoff jingle, footstep loop, and effects for kicks, goals, bounces, the
+  whistle, and substitutions (randomised kick/goal variants for variety)
 - Pause and restart support
 
 ## Requirements
@@ -78,9 +80,9 @@ atb-worldcup/
 │   ├── goal.lua      # Goal zones and scoring
 │   ├── ui.lua        # HUD, menus, and overlays
 │   ├── assets.lua    # Central sprite loader
-│   └── audio.lua     # Sound effect loader
-├── assets/           # Generated PNG sprites and WAV sound effects
-│   └── sfx/          # WAV sound effects
+│   └── audio.lua     # Music / sound effect loader and playback
+├── assets/           # PNG sprites and audio
+│   └── sfx/          # OGG music + effects (WAV fallbacks for a few cues)
 ├── tools/
 │   ├── generate_assets.py  # Sprite generator script
 │   └── generate_sfx.py     # Sound effect generator script
@@ -92,9 +94,15 @@ atb-worldcup/
 
 ## Assets
 
-The game ships with generated pixel-art sprites in `assets/` and sound effects in
-`assets/sfx/`. If the sprites are missing, the renderer falls back to the
-original geometric shapes; missing sounds are simply skipped.
+The game ships with pixel-art sprites in `assets/` and audio in `assets/sfx/`.
+If the sprites are missing, the renderer falls back to the original geometric
+shapes; missing sounds are simply skipped.
+
+Audio loading prefers the richer **OGG** assets (`theme`, `start`, `crowd`,
+`move`, and the `kick0-3` / `goal0-1` variants). The `tools/generate_sfx.py`
+script only synthesises simple **WAV** placeholders (`bounce`, `substitute`,
+`whistle`, plus single `kick`/`goal`), which are used as fallbacks when the
+matching OGG is absent. The large `theme.ogg` is streamed (see `theme.ogg.options`).
 
 ### Regenerate image assets
 
