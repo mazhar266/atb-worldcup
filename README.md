@@ -5,11 +5,16 @@ An arcade-style 2D football game built with [LÖVE2D](https://love2d.org/) (Love
 ## Features
 
 - Arcade-style 2D football (soccer) gameplay
+- **Full teams on the pitch** — like FIFA, each side fields a **goalkeeper and outfield runners** in a
+  formation, so the whole team moves with play (the rest are AI-driven; you steer one player at a time)
+- **Pass & switch control** — you always control the player on the ball; the kick key **passes to a
+  team-mate and hands you control of them**, and control auto-switches to whoever wins a loose ball
+  (modelled on the Code-the-Classics `soccer.py`). A chevron marks who you're controlling
 - 2-player local versus mode or 1-player vs AI
 - **Difficulty modes** — Easy / Medium / Hard (with custom taglines) scale the AI's speed and kicking; names, taglines, and tuning all editable in [`src/config.lua`](src/config.lua)
 - **Named squads with attributes** — each of the 3 players per team has **speed**, **strength**, and **stamina** ratings (1–10), all editable in [`src/config.lua`](src/config.lua)
 - **Speed** sets how fast a player runs · **Strength** sets how far they kick the ball · **Stamina** is their "life" (maximum energy)
-- **Squad & substitutions** — 1 player on the pitch, 2 on the bench; the active player's name and stats show in the HUD
+- **Squad & substitutions** — the captain you control is a 3-player squad (1 on the pitch, 2 on the bench); the active player's name and stats show in the HUD
 - **Stamina system** — the active player tires while running and kicking; tired players move slower and kick weaker
 - **Fresh legs** — substitute the active player for a rested one on the bench; benched players recover stamina (the AI manages its own subs too)
 - Simple ball physics with velocity and friction
@@ -53,12 +58,18 @@ An arcade-style 2D football game built with [LÖVE2D](https://love2d.org/) (Love
 | Move Down     | `S`              | `↓` (Down Arrow)      |
 | Move Left     | `A`              | `←` (Left Arrow)      |
 | Move Right    | `D`              | `→` (Right Arrow)     |
-| Kick Ball     | `F`              | `L`                   |
+| Pass / Shoot  | `F`              | `L`                   |
 | Substitute    | `Q`              | `K`                   |
 
+> **Passing & control (FIFA-style):** You drive one player at a time — whoever is
+> on the ball (a chevron marks them). Press **Pass** (`F` / `L`) to play the ball
+> to the best team-mate ahead of you; **control switches to that team-mate** so you
+> run onto your own pass. With no team-mate open, it's a shot at goal. When you
+> don't have the ball, control jumps to whichever of your players wins it.
+>
 > **Tip:** Watch the stamina bar at the top of your half. Sub on a fresh player
-> (`Q` / `K`) when you start to tire — the player you bring off recovers stamina
-> while resting on the bench. There's a short cooldown between substitutions.
+> (`Q` / `K`) when your captain tires. Only your captain carries stamina — the
+> supporting cast runs tirelessly. There's a short cooldown between substitutions.
 
 ### Menu / Global
 
@@ -71,8 +82,14 @@ An arcade-style 2D football game built with [LÖVE2D](https://love2d.org/) (Love
 
 ## Squads & Attributes
 
-Each team is a 3-player squad. Every player has three attributes on a **1–10**
-scale, defined in [`src/config.lua`](src/config.lua):
+You control your team's **captain** — a 3-player squad with a rotating substitute
+bench (this is the part with names, attributes, stamina and subs). Around the
+captain, each side also fields an **AI formation** (a goalkeeper and outfield
+runners) so the whole team is on the pitch and moving, FIFA-style. Those runners
+are fixed-pace support players and aren't part of the named squad below.
+
+Every captain squad player has three attributes on a **1–10** scale, defined in
+[`src/config.lua`](src/config.lua):
 
 | Attribute  | Effect in game                                          |
 |------------|---------------------------------------------------------|

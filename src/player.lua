@@ -105,6 +105,12 @@ function Player:reset()
     self.y  = Field.cy
     self.vx = 0
     self.vy = 0
+    -- Formation home (used when this captain is an off-ball supporter) and the
+    -- facing direction used to aim passes; default toward the opponent goal.
+    self.homeX, self.homeY = self.x, self.y
+    self.faceX = (self.team == 1) and 1 or -1
+    self.faceY = 0
+    self.holdoff = 0   -- brief lockout after passing (can't reclaim the ball)
 end
 
 -- Returns the unit vector from player to ball (or 0,0 if at same position)
@@ -161,45 +167,47 @@ function Player:tickFlash(dt)
     self.subFlash = math.max(0, self.subFlash - dt)
 end
 
-function Player:update(dt, ball)
+-- opts (all optional) decide how the captain moves this frame:
+--   humanMove = {x, y}  → driven by a human (this captain is the active player)
+--   moveTo    = {x, y}  → AI: head for this support point instead of the ball
+--   autoKick  = false   → AI: don't auto-kick (used on a human team's off-ball captain)
+--   autoSub   = false   → AI: don't auto-substitute (humans sub manually)
+-- With no humanMove/moveTo the captain runs the simple ball-chasing AI.
+function Player:update(dt, ball, opts)
+    opts = opts or {}
     self.subCooldown  = math.max(0, self.subCooldown - dt)
     self.subFlash     = math.max(0, self.subFlash - dt)
     self.kickCooldown = math.max(0, self.kickCooldown - dt)
+    self.holdoff      = math.max(0, (self.holdoff or 0) - dt)
 
     local moveX, moveY = 0, 0
 
-    if self.control == "wasd" then
-        if love.keyboard.isDown("w") then moveY = -1 end
-        if love.keyboard.isDown("s") then moveY =  1 end
-        if love.keyboard.isDown("a") then moveX = -1 end
-        if love.keyboard.isDown("d") then moveX =  1 end
-
-    elseif self.control == "arrows" then
-        if love.keyboard.isDown("up")    then moveY = -1 end
-        if love.keyboard.isDown("down")  then moveY =  1 end
-        if love.keyboard.isDown("left")  then moveX = -1 end
-        if love.keyboard.isDown("right") then moveX =  1 end
-
-    elseif self.control == "ai" then
-        -- Simple AI: move toward the ball
-        local dx = ball.x - self.x
-        local dy = ball.y - self.y
+    if opts.humanMove then
+        moveX, moveY = opts.humanMove[1], opts.humanMove[2]
+    else
+        -- AI: steer toward a support point if given, otherwise toward the ball.
+        local tx = opts.moveTo and opts.moveTo[1] or ball.x
+        local ty = opts.moveTo and opts.moveTo[2] or ball.y
+        local dx, dy = tx - self.x, ty - self.y
         local dist = math.sqrt(dx * dx + dy * dy)
         if dist > 5 then
-            moveX = dx / dist
-            moveY = dy / dist
+            moveX, moveY = dx / dist, dy / dist
         end
-        -- AI auto-kick when close enough — aim at the opponent goal so the ball
-        -- is cleared/shot downfield instead of being pinned into a corner.
-        if dist <= AI_RANGE then
-            local goalX = (self.team == 1) and Field.right or Field.x
-            self:kick(ball, goalX, Field.cy)
+        -- Auto-kick toward the opponent goal when close to the ball (AI teams).
+        if opts.autoKick ~= false then
+            local bdx, bdy = ball.x - self.x, ball.y - self.y
+            if (bdx * bdx + bdy * bdy) <= AI_RANGE * AI_RANGE then
+                local goalX = (self.team == 1) and Field.right or Field.x
+                self:kick(ball, goalX, Field.cy)
+            end
         end
         -- AI manages its own fitness: sub off a tired player for a fresh one
-        if self:staminaFrac() < AI_SUB_THRESHOLD then
-            local _, benchFrac = self:freshestBench()
-            if benchFrac and benchFrac >= AI_SUB_TARGET then
-                self:substitute()
+        if opts.autoSub ~= false then
+            if self:staminaFrac() < AI_SUB_THRESHOLD then
+                local _, benchFrac = self:freshestBench()
+                if benchFrac and benchFrac >= AI_SUB_TARGET then
+                    self:substitute()
+                end
             end
         end
     end
@@ -213,10 +221,13 @@ function Player:update(dt, ball)
     local len = math.sqrt(moveX * moveX + moveY * moveY)
     local isMoving = len > 0
     self.moving = isMoving   -- read by the audio layer for the movement loop
+    local dirX, dirY = 0, 0
     if isMoving then
+        dirX, dirY = moveX / len, moveY / len
         local spd = member.speedPx * speedMul * self.aiSpeedMul
-        self.x = self.x + (moveX / len) * spd * dt
-        self.y = self.y + (moveY / len) * spd * dt
+        self.x = self.x + dirX * spd * dt
+        self.y = self.y + dirY * spd * dt
+        self.faceX, self.faceY = dirX, dirY   -- remember facing for aiming passes
     end
 
     -- Drain the active member; regenerate everyone on the bench (to its own max)
@@ -245,8 +256,8 @@ function Player:update(dt, ball)
         ball.y = ball.y + ny * overlap
         -- Transfer some of the player's movement energy (also fatigue-scaled)
         local effSpeed = member.speedPx * speedMul * self.aiSpeedMul
-        local relVx = ball.vx - (moveX * effSpeed)
-        local relVy = ball.vy - (moveY * effSpeed)
+        local relVx = ball.vx - (dirX * effSpeed)
+        local relVy = ball.vy - (dirY * effSpeed)
         local dot = relVx * nx + relVy * ny
         if dot < 0 then
             ball.vx = ball.vx - dot * nx * 0.6

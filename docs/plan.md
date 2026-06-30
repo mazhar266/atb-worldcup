@@ -13,14 +13,57 @@ game that ATB colleagues can enjoy during breaks.
 ### Core Concept
 
 - Top-down 2D football pitch
-- Two teams, each with a **3-player squad**: one player on the pitch, two on the bench
+- **Full teams on the pitch** (FIFA-style): each side fields one controllable
+  **captain** plus an AI **formation** — a goalkeeper and outfield runners — so the
+  whole team moves with play (see *Teams & Formations* below)
+- The captain is a **3-player squad**: one player on the pitch, two on the bench
 - Kick the ball into the opponent's goal to score
 - 90-second match; highest score wins
 - If tied at full time, sudden-death overtime (first goal wins)
 
+### Teams & Formations
+
+Closely modelled on [Code-the-Classics `soccer.py`](https://github.com/Wireframe-Magazine/Code-the-Classics/blob/master/soccer-master/soccer.py),
+each side puts a whole team on the pitch rather than a lone player:
+
+- Each side has a named **captain** (`src/player.lua`, carrying the stamina/substitution
+  depth below) plus a **formation** of AI runners in **`src/teammate.lua`**.
+  `Teammate.formation()` builds one side's lineup from a `FORMATION` table — currently a
+  **goalkeeper + 3 outfielders** (left-team anchors are mirrored in `x` for the right
+  team). The runners are lightweight: fixed pace, no stamina or subs.
+- **Formation behaviour:** the outfielder nearest the ball becomes the "lead" and chases
+  it; the others hold a home anchor that drifts toward the ball, so the line pushes up and
+  drops back with play. The **goalkeeper** tracks the ball along its goal line and rushes
+  out to smother a close ball on its own side.
+
+#### Control & passing (FIFA-style)
+
+You drive **one** player at a time per team — the **controlled unit** (`game.lua`'s
+`control1`/`control2`; the captain or any outfielder, never the keeper), mirroring
+`soccer.py`'s `active_control_player`:
+
+- **Control follows the ball.** While your active player is on the ball you keep control;
+  otherwise control jumps to whichever of your players wins a loose ball (`updatePossession`).
+- **The kick key is a pass.** When you're on the ball, `F`/`L` passes to the best team-mate
+  *ahead in your facing direction* (`pickPassTarget`) and **hands you control of them**
+  (`passBallTo` sets the new controlled unit) — you run onto your own pass. With no
+  team-mate open it shoots at goal. A short `holdoff`/`passTimer` stops the passer reclaiming
+  it and keeps mates from stealing the pass.
+- A **chevron** marks the player you control; `resetControl()` re-points control to the unit
+  nearest the ball at each kickoff.
+- How each unit moves is chosen in `game.lua` and passed into `:update(dt, ball, opts)`
+  (same `opts` for `Player` and `Teammate`): `humanMove` for the controlled unit, otherwise
+  AI (`moveTo` support point, else chase). `autoKick=false`/`autoSub=false` keep a human
+  team's off-ball players from blasting the ball or auto-subbing.
+- Difficulty (`aiSpeed`/`aiKick`) scales the AI side's formation just like its captain.
+- The formation is **additive** — it doesn't touch the squad/stamina invariants. Only the
+  **captain carries stamina** (controlling a team-mate doesn't tire). Teammate tuning lives
+  in `local` constants at the top of `src/teammate.lua`; passing/control tuning (`PASS_*`,
+  `POSSESS_*`, `SHOOT_*`) is at the top of `src/game.lua`.
+
 ### Stamina & Substitutions
 
-The on-pitch player is the only member controlled at any time. Fatigue turns
+The captain's on-pitch member is the only player you control directly. Fatigue turns
 squad rotation into the core strategic layer:
 
 - Each player has a **stamina** bar whose maximum is set by their stamina
@@ -78,10 +121,11 @@ players are unaffected. Defaults: Easy 0.70/0.85, Medium 1.0/1.0, Hard 1.25/1.15
 
 - Generated pixel-art sprites with shape-based fallback (sprites live in `assets/` and are optional)
 - Green pitch with white lines and a subtle grass texture
-- Red/blue player sprites = active players (shaded per squad member, jersey number drawn on top)
-- Soccer ball sprite
+- Red/blue player sprites = captains (shaded per squad member, jersey number drawn on top)
+- Each side's AI formation drawn in the same team colours; goalkeepers wear a yellow ring
+- Soccer ball sprite (drawn on top of the bodies so it is never hidden)
 - White rectangles = Goals
-- Stamina bar + bench pips for each team in the top corners of the pitch
+- Stamina bar + bench pips for each team in the top corners of the pitch (captain only)
 
 ---
 
@@ -96,7 +140,8 @@ players are unaffected. Defaults: Easy 0.70/0.85, Medium 1.0/1.0, Hard 1.25/1.15
 | `src/game.lua`    | Game state machine (menu → playing → paused → over) |
 | `src/field.lua`   | Draw pitch, centre circle, halfway line, goal boxes |
 | `src/ball.lua`    | Ball position, velocity, friction, wall bouncing    |
-| `src/player.lua`  | Squad roster, attributes, movement, kick, stamina, subs, AI |
+| `src/player.lua`  | Captain: squad roster, attributes, movement, kick, stamina, subs, AI |
+| `src/teammate.lua`| AI formation: goalkeeper + outfield runners (chase, support, shoot) |
 | `src/goal.lua`    | Goal zone rectangles, collision detection, scoring  |
 | `src/ui.lua`      | HUD (score, timer, stamina, names/stats), menu, game-over |
 | `src/config.lua`  | Single config source: team/player names + attributes (1–10) |
@@ -155,7 +200,9 @@ MENU  ──(Enter)──►  PLAYING  ──(P)──►  PAUSED
 - [x] `Q` / `K` substitution keys wired into the game loop (`src/game.lua`)
 
 ### Phase 5 – AI Opponent (Future)
-- [ ] Smarter rule-based AI: positioning, defending, anticipating the ball
+- [x] Full-team formations — goalkeeper + outfield runners per side that chase, support, and shoot, so all players run on the pitch FIFA-style (`src/teammate.lua`, wired in `src/game.lua`)
+- [x] Pass & control-switch — control the player on the ball; the kick key passes to a team-mate and hands you control of them; control follows loose balls (modelled on `soccer.py`; `control1`/`control2`, `humanKick`, `updatePossession` in `src/game.lua`)
+- [ ] Smarter rule-based AI: positioning, defending, anticipating the ball (captain AI is still a simple ball-chaser)
 - [x] Difficulty selector on menu (Easy / Medium / Hard) — config-driven names + taglines, scaling the AI's `aiSpeed` / `aiKick`
 - [ ] Optional sprint key (hold to move faster, drains stamina quicker)
 - [ ] Limited substitution count per match (more sim-like)
@@ -200,6 +247,9 @@ crowd and movement loop and unpausing resumes them. The movement loop follows
 - **Field**: 700 × 480 px, centred on screen
 - **Goals**: 20 × 120 px, centred vertically on each side
 - **HUD strip**: 40 px at the top
+- The sketch shows only the two captains (①/②); in play each side also fields a
+  goalkeeper and three outfield runners spread across its half (see *Teams &
+  Formations*)
 
 ---
 
@@ -211,7 +261,7 @@ crowd and movement loop and unpausing resumes them. The movement loop follows
 | Move Down     | S          | ↓ Down Arrow    |
 | Move Left     | A          | ← Left Arrow    |
 | Move Right    | D          | → Right Arrow   |
-| Kick          | F          | L               |
+| Pass / Shoot  | F          | L               |
 | Substitute    | Q          | K               |
 
 | Global        | Key         |
@@ -228,8 +278,11 @@ crowd and movement loop and unpausing resumes them. The movement loop follows
 - **Language**: Lua 5.1 (bundled with LÖVE2D)
 - **Framework**: LÖVE2D 11.x
 - **Physics**: Custom simple AABB + velocity; no physics library needed
-- **Kick mechanic**: When `F`/`L` is pressed and the ball is within 40 px of
-  the player centre, apply an impulse in the direction from player to ball
+- **Pass / shoot mechanic**: When `F`/`L` is pressed and the controlled player is
+  on the ball, pass to the best team-mate ahead and switch control to them
+  (`humanKick`/`passBallTo` in `src/game.lua`); with none open, shoot at goal.
+  Control otherwise follows whoever wins the ball (`updatePossession`). AI players
+  still kick by impulse toward goal when near the ball (`Player:kick`)
 - **Ball friction**: Ball velocity multiplied by `0.98` each frame (60 fps)
 - **Wall bounce**: Ball reflects off field boundary walls; goals pass through
   the goal opening

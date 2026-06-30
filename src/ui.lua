@@ -255,9 +255,10 @@ function UI.drawMenu(items, selected, subtitle, navLine)
     local lines = {
         navLine or "W/S or Up/Down: Navigate    Enter: Select",
         "",
-        "P1: WASD move  ·  F kick  ·  Q substitute",
-        "P2: Arrows move  ·  L kick  ·  K substitute",
+        "P1: WASD move  ·  F pass/shoot  ·  Q sub",
+        "P2: Arrows move  ·  L pass/shoot  ·  K sub",
         "",
+        "Pass to a team-mate to take control of them — FIFA-style!",
         "Players tire as they run — sub on fresh legs!",
     }
     local instrY = startY + #items * spacing + 24

@@ -28,20 +28,23 @@ the `joystick` and `physics` modules — do **not** use `love.physics`; all moti
 
 `src/game.lua` is the orchestrator and the single source of truth for the **state machine**:
 `menu → playing → overtime → paused → goal → gameover`. It owns all mutable match state at module level
-(`ball`, `player1`, `player2`, `timeLeft`, `isOvertime`, score via the `Goal` module) and dispatches
-`update`/`draw`/`keypressed` by `state`. Key transitions: a draw at 0:00 enters sudden-death `overtime`;
+(`ball`, `player1`, `player2`, the two AI formations `mates1`/`mates2`, `timeLeft`, `isOvertime`, score via
+the `Goal` module) and dispatches `update`/`draw`/`keypressed` by `state`. The squad-vs-formation split
+(one controllable captain + an AI supporting cast per side) is also wired here — see the formation model
+below. Key transitions: a draw at 0:00 enters sudden-death `overtime`;
 a scored goal enters a brief `goal` freeze, then either ends the match (overtime) or resets for kickoff.
 Inputs are only honored in the states where they make sense (e.g. kick/substitute keys only in
 `playing`/`overtime`).
 
 The other `src/` modules split into two coexisting conventions — be consistent with whichever a file
 already uses:
-- **Metatable OOP** (`:new`, `__index`): `src/ball.lua`, `src/player.lua` — instantiated per match.
+- **Metatable OOP** (`:new`, `__index`): `src/ball.lua`, `src/player.lua`, `src/teammate.lua` — instantiated per match.
 - **Plain-table singletons**: `src/field.lua`, `src/goal.lua`, `src/ui.lua`, `src/assets.lua`, `src/audio.lua`, `src/config.lua` — stateless-ish shared modules.
 
 `src/field.lua` is the **shared coordinate authority**: pitch/goal geometry (`x`, `y`, `right`, `bottom`,
-`cx`, `cy`, `goalTop`, `goalBottom`, `goalWidth`, …). `ball.lua`, `player.lua`, `goal.lua`, and `ui.lua`
-all read these for boundaries, scoring, and HUD placement. Gotcha: the derived values (`right`, `cx`, …)
+`cx`, `cy`, `goalTop`, `goalBottom`, `goalWidth`, …). `ball.lua`, `player.lua`, `teammate.lua`, `goal.lua`,
+and `ui.lua` all read these for boundaries, formation anchors, scoring, and HUD placement. Gotcha: the
+derived values (`right`, `cx`, …)
 are computed **once at require-time** from the literal fields (despite a comment mentioning a `Field.load`
 that doesn't exist) — changing `Field.width`/`x` at runtime won't recompute them.
 
@@ -60,11 +63,62 @@ machine** (theme on `menu`/`gameover`, crowd during play, move follows human pla
 there, keep `audio.lua` as low-level play/stop primitives. `assets/sfx/theme.ogg.options` (`stream: true`)
 is just a hint that the large theme is loaded as a streaming source.
 
+## Full-team formation model (who is on the pitch)
+
+To fill the pitch like a real match (the FIFA-style "all players running" look, modelled on
+Code-the-Classics `soccer.py`), each side fields **one controllable captain + an AI formation of
+team-mates**. The captain is the `Player` from `src/player.lua` (carrying the whole squad/stamina/sub
+system below). The supporting cast lives in **`src/teammate.lua`**: a `Teammate` is a lightweight pitch
+body with **no stamina/substitution depth** — it just runs at a fixed speed, holds a ball-aware formation
+anchor, and kicks. `Teammate.formation(team, aiMods)` builds one side's lineup from the module-level
+`FORMATION` table (currently a **goalkeeper + 3 outfielders**; left-team fractions are mirrored in `x` for
+the right team). Teammates are **purely additive** — they leave `player.lua` and its invariants untouched.
+
+### Control & passing (FIFA-style; modelled on `soccer.py`)
+
+You drive **one** player per team at a time — the **controlled unit** (`game.lua`'s `control1`/`control2`,
+which may point at the captain `Player` **or** any outfield `Teammate`; never the keeper). The model mirrors
+Code-the-Classics `soccer.py`'s `active_control_player`:
+- **Control follows the ball.** `updatePossession(t)` keeps control on the active unit while it is within
+  `POSSESS_RANGE` of the ball, otherwise hands control to whichever team unit is now on the ball. So you
+  always end up driving the player who has it.
+- **The kick key is a pass.** `humanKick(t)` (F = team 1, L = team 2) is honoured only when the active unit
+  is on the ball. It calls `pickPassTarget` (best team-mate that is **ahead in your facing direction**,
+  within `PASS_RANGE`, scored by forwardness+closeness); `passBallTo` kicks to them (led toward goal) **and
+  sets them as the controlled unit** — control follows the pass. With no team-mate open it `shootAtGoal`.
+- A **chevron** (`drawControlMarker`) marks the player you currently control. `resetControl()` re-points
+  control to the unit nearest the ball at every kickoff / overtime restart and clears pass lockouts
+  (`holdoff` per unit, `passTimer` per team — during which off-ball mates hold so they don't steal the pass).
+- Tuning for all of this is the `PASS_*` / `POSSESS_*` / `SHOOT_*` constants at the top of `src/game.lua`.
+
+**How a unit moves is decided by `game.lua` and passed into `:update(dt, ball, opts)`** (both `Player` and
+`Teammate` take the same `opts`): `humanMove = {x,y}` drives the controlled unit from the keys; otherwise the
+unit runs AI (`moveTo` = a support point, else chase the ball). `autoKick=false` stops a human team's
+off-ball players from blasting the ball (the human passes instead); `autoSub=false` leaves subs manual.
+Keepers always auto-clear. Every unit stores `faceX/faceY` (facing, for aiming passes) and `holdoff`.
+
+`game.lua` drives both teams each frame via `updateTeams(dt)`, branching per side:
+- **`updateHumanTeam`** moves the controlled unit by the keys and runs everyone else as AI; while you hold
+  the ball (or just passed) off-ball mates hold a support shape (captain → `captainSupportPoint`), otherwise
+  the nearest outfielder chases to win it back. Then `separateTeam` + `updatePossession`.
+- **`updateAITeam`** is the old behaviour: the captain chases + auto-kicks + auto-subs, and `updateTeam`
+  runs the formation (lead chases, others hold a ball-biased anchor). The **goalkeeper** tracks the ball
+  along its line and rushes out to smother a close ball on its own side.
+- **`separateTeam`** de-overlaps same-team bodies (team-mates yield; the captain is immovable).
+- `aiMods` (the difficulty `aiSpeed`/`aiKick`) scale the AI side's team-mates too, just like the AI captain.
+- Teammates freeze during the `goal` flash (not updated) and are sent home by `resetMates()` + `resetControl()`
+  on every kickoff / overtime restart, alongside `Player:reset()`. Draw order: formations → captains → ball
+  → control chevrons.
+- Teammate tuning (speeds, kick power/range/cooldown, formation anchors, keeper box/reach) is `local`
+  constants at the top of `src/teammate.lua`. The squad/stamina UI panel still only reflects the captain;
+  **only the captain carries stamina** (controlling a stamina-less team-mate does not tire).
+
 ## Squad / stamina / substitution model (the main gameplay system)
 
-Each team is a **3-player squad**, not a single player. A `Player` object is a *pitch slot* that owns the
-position/velocity (`x`, `y`, `vx`, `vy`); its `roster` is an array of members and `active` indexes the
-member currently on the pitch. Only the active member is controlled and drawn.
+Each team's **captain** is a **3-player squad**, not a single player. A `Player` object is a *pitch slot*
+that owns the position/velocity (`x`, `y`, `vx`, `vy`); its `roster` is an array of members and `active`
+indexes the member currently on the pitch. Only the active member is controlled and drawn (the rest of the
+on-pitch team are the `Teammate`s above; the squad's other two members are bench substitutes, not runners).
 
 **Per-player attributes come from a config file.** `src/config.lua` is the single source of truth: its
 `TEAMS` table (validated on load) gives every player a `name` and `speed`/`strength`/`stamina` on a 1–10
