@@ -1,14 +1,13 @@
 -- src/game.lua: Game state machine and main orchestrator
 
-local Field    = require("src.field")
-local Ball     = require("src.ball")
-local Player   = require("src.player")
-local Teammate = require("src.teammate")
-local Goal     = require("src.goal")
-local UI       = require("src.ui")
-local Assets   = require("src.assets")
-local Audio    = require("src.audio")
-local Config   = require("src.config")
+local Field   = require("src.field")
+local Ball    = require("src.ball")
+local Player  = require("src.player")
+local Goal    = require("src.goal")
+local UI      = require("src.ui")
+local Assets  = require("src.assets")
+local Audio   = require("src.audio")
+local Config  = require("src.config")
 
 local Game = {}
 
@@ -28,7 +27,7 @@ local GOAL_FREEZE   = 1.8   -- seconds to show goal flash
 -- FIFA-style (modelled on Code-the-Classics soccer.py): you control one player;
 -- the kick key PASSES to the best team-mate and hands control to them. Control
 -- otherwise follows whichever of your players wins a loose ball.
-local POSSESS_RANGE   = 30    -- px: how close a unit must be to "have" the ball
+local POSSESS_RANGE   = 30    -- px: how close a player must be to "have" the ball
 local PASS_KICK_RANGE = 46    -- px: how close you must be to pass / shoot
 local PASS_RANGE      = 340   -- px: longest auto-pass
 local PASS_CONE       = 0.30  -- dot: how "ahead" (in your facing dir) a target must be
@@ -42,14 +41,11 @@ local PASS_HOLDOFF    = 0.45  -- s: after a pass, passer can't reclaim & mates h
 -- ─── Module-level state ──────────────────────────────────────────────────────
 local state
 local ball
-local player1          -- team 1's controllable captain (squad + stamina + subs)
-local player2          -- team 2's captain (human in 2P, AI otherwise)
-local mates1           -- team 1's AI formation (goalkeeper + outfield runners)
-local mates2           -- team 2's AI formation
-local control1         -- team 1's currently controlled unit (captain or a team-mate)
-local control2         -- team 2's currently controlled unit
-local passTimer1       -- team 1: seconds left in which mates hold after a pass
-local passTimer2       -- team 2: same
+local team1, team2       -- arrays of on-field players (one per config squad member)
+local scheme1, scheme2   -- per-team control: "wasd" / "arrows" / "ai"
+local control1, control2 -- the player each team currently controls (a team-array entry)
+local passTimer1         -- team 1: seconds in which mates hold after a pass
+local passTimer2         -- team 2: same
 local timeLeft
 local isOvertime
 local goalFlashTimer
@@ -63,15 +59,15 @@ local currentDifficulty  -- difficulty index used for the AI
 
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
--- ── Team accessors (a "team" is its captain + its formation of team-mates) ────
-local function teamCaptain(t)    return (t == 1) and player1 or player2 end
-local function teamMates(t)      return (t == 1) and mates1  or mates2  end
-local function teamIsHuman(t)    return teamCaptain(t).control ~= "ai" end
+-- ── Team accessors (a "team" is just an array of its on-field config players) ──
+local function teamArr(t)        return (t == 1) and team1 or team2 end
+local function teamScheme(t)     return (t == 1) and scheme1 or scheme2 end
+local function teamIsHuman(t)    return teamScheme(t) ~= "ai" end
 local function controlledUnit(t) return (t == 1) and control1 or control2 end
 local function setControlled(t, u) if t == 1 then control1 = u else control2 = u end end
 local function passTimerGet(t)   return (t == 1) and passTimer1 or passTimer2 end
 local function passTimerSet(t, v) if t == 1 then passTimer1 = v else passTimer2 = v end end
-local function oppGoalX(t)       return (t == 1) and Field.right or Field.x end
+local function oppGoalX(t)        return (t == 1) and Field.right or Field.x end
 
 -- Squared distance between two bodies (avoids a sqrt for "who is nearest").
 local function dist2(a, b)
@@ -79,25 +75,15 @@ local function dist2(a, b)
     return dx * dx + dy * dy
 end
 
--- Is unit `u` within `range` px of the ball?
+-- Is player `u` within `range` px of the ball?
 local function nearBall(u, range)
     local dx, dy = ball.x - u.x, ball.y - u.y
     return (dx * dx + dy * dy) <= range * range
 end
 
--- The on-pitch outfield units that can be controlled / receive a pass (the
--- captain + outfielders; the goalkeeper is never controlled or passed to).
-local function fieldUnits(t)
-    local u = { teamCaptain(t) }
-    for _, m in ipairs(teamMates(t)) do
-        if m.role ~= "gk" then u[#u + 1] = m end
-    end
-    return u
-end
-
--- Read a human team's movement keys into a {x, y} vector (the unit normalises).
+-- Read a human team's movement keys into a {x, y} vector (the player normalises).
 local function humanMoveVector(t)
-    local scheme = teamCaptain(t).control
+    local scheme = teamScheme(t)
     local mx, my = 0, 0
     if scheme == "wasd" then
         if love.keyboard.isDown("w") then my = -1 end
@@ -113,12 +99,14 @@ local function humanMoveVector(t)
     return { mx, my }
 end
 
--- The field unit (captain or outfielder) nearest the ball right now.
-local function nearestFieldUnitToBall(t)
+-- The player on team `t` nearest the ball (optionally skipping one).
+local function nearestPlayerToBall(t, exclude)
     local best, bestD
-    for _, u in ipairs(fieldUnits(t)) do
-        local d = dist2(u, ball)
-        if not bestD or d < bestD then bestD, best = d, u end
+    for _, p in ipairs(teamArr(t)) do
+        if p ~= exclude then
+            local d = dist2(p, ball)
+            if not bestD or d < bestD then bestD, best = d, p end
+        end
     end
     return best
 end
@@ -126,88 +114,73 @@ end
 -- At each kickoff, control the player nearest the ball and clear pass lockouts.
 local function resetControl()
     passTimer1, passTimer2 = 0, 0
-    player1.holdoff, player2.holdoff = 0, 0
-    for _, m in ipairs(mates1) do m.holdoff = 0 end
-    for _, m in ipairs(mates2) do m.holdoff = 0 end
-    setControlled(1, nearestFieldUnitToBall(1))
-    setControlled(2, nearestFieldUnitToBall(2))
+    for _, p in ipairs(team1) do p.holdoff = 0 end
+    for _, p in ipairs(team2) do p.holdoff = 0 end
+    setControlled(1, nearestPlayerToBall(1))
+    setControlled(2, nearestPlayerToBall(2))
+end
+
+-- Build one team: one Player per config squad member, in a formation.
+local function buildTeam(team, aiMods)
+    local total = #Config.squad(team)
+    local arr = {}
+    for i = 1, total do
+        arr[i] = Player.new(team, i, total, aiMods)
+    end
+    return arr
 end
 
 local function createPlayers(mode, difficulty)
-    player1 = Player.new(1, "wasd")
-    mates1  = Teammate.formation(1, nil)   -- human side: no AI scaling
+    scheme1 = "wasd"
+    team1   = buildTeam(1, nil)            -- human side: no AI scaling
     if mode == 1 then
         local d = Config.difficulty(difficulty)
-        local aiMods = { speed = d.aiSpeed, kick = d.aiKick }
-        player2 = Player.new(2, "ai", aiMods)
-        mates2  = Teammate.formation(2, aiMods)
+        scheme2 = "ai"
+        team2   = buildTeam(2, { speed = d.aiSpeed, kick = d.aiKick })
     else
-        player2 = Player.new(2, "arrows")
-        mates2  = Teammate.formation(2, nil)
+        scheme2 = "arrows"
+        team2   = buildTeam(2, nil)
     end
     resetControl()
 end
 
--- Update one AI team's formation. The outfield team-mate nearest the ball
--- becomes the "lead" and chases it — but only when its captain isn't already the
--- closest body. Goalkeepers run their own logic and never count as the chaser.
-local function updateTeam(mates, captain, ball, dt)
-    local capD = dist2(captain, ball)
-    local chaser, chaserD
-    for _, m in ipairs(mates) do
-        if m.role ~= "gk" then
-            local d = dist2(m, ball)
-            if not chaserD or d < chaserD then chaserD, chaser = d, m end
-        end
-    end
-    if chaser and chaserD >= capD then chaser = nil end   -- captain is closer
-
-    for _, m in ipairs(mates) do
-        m:update(dt, ball, { chase = (m == chaser), autoKick = true })
-    end
-end
-
--- Keep same-team bodies from stacking. Team-mates yield; the captain is treated
--- as immovable so a human's control is never nudged by the crowd.
-local function separateTeam(mates, captain)
-    for i = 1, #mates do
-        local a = mates[i]
-        -- vs the captain (push only the team-mate)
-        local dx, dy = a.x - captain.x, a.y - captain.y
-        local d = math.sqrt(dx * dx + dy * dy)
-        local minD = a.radius + captain.radius
-        if d > 0 and d < minD then
-            local push = minD - d
-            a.x = a.x + (dx / d) * push
-            a.y = a.y + (dy / d) * push
-        end
-        -- vs other team-mates (split the overlap)
-        for j = i + 1, #mates do
-            local b = mates[j]
-            dx, dy = a.x - b.x, a.y - b.y
-            d = math.sqrt(dx * dx + dy * dy)
-            minD = a.radius + b.radius
+-- Keep same-team bodies from stacking. `immovable` (the controlled player) is
+-- never moved, so a human's control is not nudged by the crowd.
+local function separateTeam(arr, immovable)
+    for i = 1, #arr do
+        local a = arr[i]
+        for j = i + 1, #arr do
+            local b = arr[j]
+            local dx, dy = a.x - b.x, a.y - b.y
+            local d = math.sqrt(dx * dx + dy * dy)
+            local minD = a.radius + b.radius
             if d > 0 and d < minD then
-                local push = (minD - d) * 0.5
                 local nx, ny = dx / d, dy / d
-                a.x, a.y = a.x + nx * push, a.y + ny * push
-                b.x, b.y = b.x - nx * push, b.y - ny * push
+                local push = minD - d
+                if a == immovable then
+                    b.x, b.y = b.x - nx * push, b.y - ny * push
+                elseif b == immovable then
+                    a.x, a.y = a.x + nx * push, a.y + ny * push
+                else
+                    a.x, a.y = a.x + nx * push * 0.5, a.y + ny * push * 0.5
+                    b.x, b.y = b.x - nx * push * 0.5, b.y - ny * push * 0.5
+                end
             end
         end
-        -- keep inside the pitch after any shoving
+    end
+    for _, a in ipairs(arr) do
         a.x = math.max(Field.x + a.radius, math.min(Field.right  - a.radius, a.x))
         a.y = math.max(Field.y + a.radius, math.min(Field.bottom - a.radius, a.y))
     end
 end
 
 -- Control follows the ball: keep control while the active player still has it,
--- otherwise hand it to whichever team-mate is now on the ball. Run for human
--- teams only (the AI doesn't need a "controlled" unit).
+-- otherwise hand it to whichever team-mate is now on the ball.
 local function updatePossession(t)
     local cur = controlledUnit(t)
     if cur and (cur.holdoff or 0) <= 0 and nearBall(cur, POSSESS_RANGE) then return end
     local best, bestD
-    for _, u in ipairs(fieldUnits(t)) do
+    for _, u in ipairs(teamArr(t)) do
         if (u.holdoff or 0) <= 0 then
             local d = dist2(u, ball)
             if d <= POSSESS_RANGE * POSSESS_RANGE and (not bestD or d < bestD) then
@@ -224,7 +197,7 @@ local function pickPassTarget(t, passer)
     local fx, fy = passer.faceX or 0, passer.faceY or 0
     if fx == 0 and fy == 0 then fx, fy = (t == 1) and 1 or -1, 0 end
     local best, bestScore
-    for _, u in ipairs(fieldUnits(t)) do
+    for _, u in ipairs(teamArr(t)) do
         if u ~= passer then
             local dx, dy = u.x - passer.x, u.y - passer.y
             local d = math.sqrt(dx * dx + dy * dy)
@@ -276,67 +249,42 @@ local function humanKick(t)
     Audio.playKick()
 end
 
--- The off-ball outfield team-mate nearest the ball (the one that should chase).
-local function nearestOutfieldChaser(t, exclude)
-    local best, bestD
-    for _, m in ipairs(teamMates(t)) do
-        if m.role ~= "gk" and m ~= exclude then
-            local d = dist2(m, ball)
-            if not bestD or d < bestD then bestD, best = d, m end
-        end
-    end
-    return best
-end
-
--- A home-ish support point for an off-ball captain, drifting toward the ball.
-local function captainSupportPoint(cap)
-    return { cap.homeX + (ball.x - cap.homeX) * 0.5,
-             cap.homeY + (ball.y - cap.homeY) * 0.4 }
-end
-
 -- Update a human-controlled team: the active player follows the keys; everyone
 -- else runs AI. While we hold the ball (or just passed), off-ball players hold a
--- support shape so they don't fight us for it; otherwise they go win it back.
+-- support shape so they don't fight us for it; otherwise the nearest goes to win
+-- it back.
 local function updateHumanTeam(t, dt)
-    local cap   = teamCaptain(t)
-    local mates = teamMates(t)
-    local cur   = controlledUnit(t)
-    local mv    = humanMoveVector(t)
+    local arr = teamArr(t)
+    local cur = controlledUnit(t)
+    local mv  = humanMoveVector(t)
     local weHave   = cur and nearBall(cur, POSSESS_RANGE)
     local letChase = (not weHave) and (passTimerGet(t) <= 0)
-    local chaser   = letChase and nearestOutfieldChaser(t, cur) or nil
+    local chaser   = letChase and nearestPlayerToBall(t, cur) or nil
 
-    if cap == cur then
-        cap:update(dt, ball, { humanMove = mv })
-    elseif weHave or passTimerGet(t) > 0 then
-        cap:update(dt, ball, { moveTo = captainSupportPoint(cap), autoKick = false, autoSub = false })
-    else
-        cap:update(dt, ball, { autoKick = false, autoSub = false })  -- chase to win it
-    end
-
-    for _, m in ipairs(mates) do
-        if m == cur then
-            m:update(dt, ball, { humanMove = mv })
+    for _, p in ipairs(arr) do
+        if p == cur then
+            p:update(dt, ball, { humanMove = mv })
         else
-            m:update(dt, ball, { chase = (m == chaser), autoKick = false })
+            p:update(dt, ball, { chase = (p == chaser), autoKick = false })
         end
     end
 
-    separateTeam(mates, cap)
+    separateTeam(arr, cur)
     updatePossession(t)
 end
 
--- Update an AI-controlled team (unchanged behaviour: captain chases + auto-kicks
--- + auto-subs; the formation supports and the lead chases).
+-- Update an AI-controlled team: the player nearest the ball is the lead (chases
+-- and auto-kicks toward goal); the rest hold a ball-biased formation shape.
 local function updateAITeam(t, dt)
-    local cap   = teamCaptain(t)
-    local mates = teamMates(t)
-    cap:update(dt, ball, { autoKick = true, autoSub = true })
-    updateTeam(mates, cap, ball, dt)
-    separateTeam(mates, cap)
+    local arr    = teamArr(t)
+    local chaser = nearestPlayerToBall(t, nil)
+    for _, p in ipairs(arr) do
+        p:update(dt, ball, { chase = (p == chaser), autoKick = true })
+    end
+    separateTeam(arr, nil)
 end
 
--- Drive both teams for a frame (captains + formations). Used in play/overtime.
+-- Drive both teams for a frame. Used in play/overtime.
 local function updateTeams(dt)
     passTimer1 = math.max(0, passTimer1 - dt)
     passTimer2 = math.max(0, passTimer2 - dt)
@@ -344,10 +292,10 @@ local function updateTeams(dt)
     if teamIsHuman(2) then updateHumanTeam(2, dt) else updateAITeam(2, dt) end
 end
 
--- Send every team-mate back to its formation home (kickoff / overtime restart).
-local function resetMates()
-    for _, m in ipairs(mates1) do m:reset() end
-    for _, m in ipairs(mates2) do m:reset() end
+-- Send every player back to its formation home (kickoff / overtime restart).
+local function resetTeams()
+    for _, p in ipairs(team1) do p:reset() end
+    for _, p in ipairs(team2) do p:reset() end
 end
 
 -- A small chevron over the player a human is currently controlling.
@@ -437,9 +385,7 @@ end
 
 local function resetAfterGoal()
     ball:reset()
-    player1:reset()
-    player2:reset()
-    resetMates()
+    resetTeams()
     resetControl()
     state = isOvertime and STATE_OVERTIME or STATE_PLAYING
 end
@@ -467,9 +413,7 @@ function Game.update(dt)
                 isOvertime = true
                 state = STATE_OVERTIME
                 ball:reset()
-                player1:reset()
-                player2:reset()
-                resetMates()
+                resetTeams()
                 resetControl()
                 Audio.playWhistle()
             else
@@ -511,10 +455,7 @@ function Game.update(dt)
 
     elseif state == STATE_GOAL then
         goalFlashTimer = goalFlashTimer - dt
-        -- Players are frozen during the goal flash, but let the sub-flash ring
-        -- keep fading so it doesn't hang on screen for the whole freeze.
-        player1:tickFlash(dt)
-        player2:tickFlash(dt)
+        -- Players are frozen during the goal flash.
         if goalFlashTimer <= 0 then
             -- In overtime a goal ends the match; in normal time reset and play on
             if isOvertime then
@@ -548,21 +489,17 @@ function Game.draw()
     -- Draw field
     Field.draw()
 
-    -- Draw entities. Formations first, then the controllable captains on top of
-    -- their team-mates, then the ball last so it is never hidden under a body.
-    for _, m in ipairs(mates1) do m:draw() end
-    for _, m in ipairs(mates2) do m:draw() end
-    player1:draw()
-    player2:draw()
+    -- Draw entities: both teams of config players, then the ball on top so it is
+    -- never hidden under a body, then the control chevrons.
+    for _, p in ipairs(team1) do p:draw() end
+    for _, p in ipairs(team2) do p:draw() end
     ball:draw()
-
-    -- Marker over the player each human is controlling right now
     drawControlMarker(1)
     drawControlMarker(2)
 
     -- Draw HUD
     UI.drawHUD(Goal.score, timeLeft, isOvertime)
-    UI.drawStamina(player1, player2)
+    UI.drawTeams(team1, team2, control1, control2)
 
     -- Overlays
     if state == STATE_GOAL then
@@ -606,10 +543,6 @@ function Game.keypressed(key)
         -- Pass / shoot: hands control to the team-mate you pass to (FIFA-style)
         if key == "f" then humanKick(1) end
         if key == "l" then humanKick(2) end
-
-        -- Substitution keys (only for human-controlled teams; act on the captain)
-        if key == "q" and player1.control ~= "ai" then player1:substitute() end
-        if key == "k" and player2.control ~= "ai" then player2:substitute() end
 
         if key == "p"      then
             state = STATE_PAUSED

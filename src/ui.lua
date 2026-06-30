@@ -101,94 +101,48 @@ local function drawBar(x, y, w, h, frac, col, alignRight)
     love.graphics.rectangle("line", x, y, w, h, 2, 2)
 end
 
--- Draw one team's fitness panel (active stamina + bench pips + sub hint) in a
--- top corner of the pitch. alignRight mirrors the layout for the right team.
-local function drawSquadPanel(p, alignRight, subKey)
-    local BARW, BARH = 120, 9
-    local PIPW, PIPH = 34, 5
-    local x0 = alignRight and (Field.right - 10 - BARW) or (Field.x + 10)
-    local y0 = Field.y + 8
-    local hasHint = (p.control ~= "ai")
-
+-- Draw one team's roster panel in a top corner of the pitch: every on-pitch
+-- config player as a row of name + stamina bar, with the player you currently
+-- control marked. alignRight anchors the panel to the right edge for team 2.
+local function drawTeamPanel(players, controlled, alignRight)
     love.graphics.setFont(fontTiny)
     local lineH = fontTiny:getHeight()
-
-    local m0      = p:activeMember()
-    local name    = m0.name or ("#" .. tostring(m0.number or "?"))
-    local attrStr = string.format("SPD %d  STR %d  STA %d",
-        m0.attrSpeed or 0, m0.attrStrength or 0, m0.attrStamina or 0)
-    local nameW   = fontTiny:getWidth(name)
-    local attrW   = fontTiny:getWidth(attrStr)
-
-    -- Vertical layout: stamina bar → attribute line → bench pips → sub hint
-    local attrY = y0 + BARH + 3
-    local pipY  = attrY + lineH + 4
-    local hintY = pipY + PIPH + 4
+    local ROWH  = lineH + 5
+    local NAMEW, BARW, BARH = 66, 84, 7
+    local padX, padY = 6, 5
+    local panelW = NAMEW + 8 + BARW
+    local x0 = alignRight and (Field.right - 10 - panelW) or (Field.x + 10)
+    local y0 = Field.y + 8
+    local panelH = #players * ROWH
 
     -- Opaque backing so moving sprites can't bleed through the panel.
-    local pad = 5
-    local bgL, bgR
-    if alignRight then
-        bgL = math.min(x0 - 6 - nameW, x0 + BARW - attrW)
-        bgR = x0 + BARW
-    else
-        bgL = x0
-        bgR = math.max(x0 + BARW + 6 + nameW, x0 + attrW)
-    end
-    local bgB = hasHint and (hintY + lineH) or (pipY + PIPH)
     love.graphics.setColor(COL_PANEL_BG)
-    love.graphics.rectangle("fill", bgL - pad, y0 - pad, (bgR - bgL) + pad * 2, (bgB - y0) + pad * 2, 4, 4)
+    love.graphics.rectangle("fill", x0 - padX, y0 - padY, panelW + padX * 2, panelH + padY * 2, 4, 4)
 
-    -- Active player's stamina bar
-    local frac = p:staminaFrac()
-    drawBar(x0, y0, BARW, BARH, frac, staminaColor(frac), alignRight)
+    for i, p in ipairs(players) do
+        local y      = y0 + (i - 1) * ROWH
+        local isCtrl = (p == controlled)
 
-    -- Active player's name beside the bar
-    love.graphics.setColor(1, 1, 1, 0.95)
-    if alignRight then
-        love.graphics.print(name, x0 - nameW - 6, y0 - 2)
-    else
-        love.graphics.print(name, x0 + BARW + 6, y0 - 2)
-    end
-
-    -- Attribute readout (speed / strength / stamina, 1–10 scale)
-    love.graphics.setColor(0.72, 0.74, 0.8)
-    if alignRight then
-        love.graphics.print(attrStr, x0 + BARW - attrW, attrY)
-    else
-        love.graphics.print(attrStr, x0, attrY)
-    end
-
-    -- Bench pips, colour-coded by each member's stamina fraction so the freshest
-    -- sub — the one substitute() will bring on — reads at a glance.
-    local benchIdx = 0
-    for i, m in ipairs(p.roster) do
-        if i ~= p.active then
-            local pf = (m.maxStamina and m.maxStamina > 0) and (m.stamina / m.maxStamina) or 0
-            local px = alignRight
-                and (x0 + BARW - PIPW - benchIdx * (PIPW + 6))
-                or  (x0 + benchIdx * (PIPW + 6))
-            drawBar(px, pipY, PIPW, PIPH, pf, staminaColor(pf), alignRight)
-            benchIdx = benchIdx + 1
+        -- Control marker (a small chevron) beside the player you steer.
+        if isCtrl then
+            love.graphics.setColor(1, 0.95, 0.5)
+            love.graphics.polygon("fill", x0 - 2, y + 1, x0 - 2, y + lineH - 1, x0 + 4, y + lineH / 2)
         end
-    end
 
-    -- Substitution key hint (only meaningful for human-controlled teams)
-    if hasHint then
-        local ready = p.subCooldown <= 0
-        love.graphics.setColor(ready and {0.95, 0.95, 0.6} or {0.5, 0.5, 0.5})
-        local hint = ready and ("SUB: " .. subKey) or "subbing..."
-        if alignRight then
-            love.graphics.print(hint, x0 + BARW - fontTiny:getWidth(hint), hintY)
-        else
-            love.graphics.print(hint, x0, hintY)
-        end
+        -- Name (brighter for the controlled player)
+        love.graphics.setColor(isCtrl and {1, 1, 1} or {0.7, 0.72, 0.78})
+        local name = p.name or ("#" .. tostring(p.number or i))
+        love.graphics.print(name, x0 + 8, y)
+
+        -- Stamina bar
+        local frac = p:staminaFrac()
+        drawBar(x0 + NAMEW + 8, y + 1, BARW, BARH, frac, staminaColor(frac), false)
     end
 end
 
-function UI.drawStamina(player1, player2)
-    drawSquadPanel(player1, false, "Q")
-    drawSquadPanel(player2, true,  "K")
+function UI.drawTeams(team1, team2, control1, control2)
+    drawTeamPanel(team1, control1, false)
+    drawTeamPanel(team2, control2, true)
 end
 
 -- ─── Goal flash ─────────────────────────────────────────────────────────────
@@ -255,11 +209,11 @@ function UI.drawMenu(items, selected, subtitle, navLine)
     local lines = {
         navLine or "W/S or Up/Down: Navigate    Enter: Select",
         "",
-        "P1: WASD move  ·  F pass/shoot  ·  Q sub",
-        "P2: Arrows move  ·  L pass/shoot  ·  K sub",
+        "P1: WASD move  ·  F pass / shoot",
+        "P2: Arrows move  ·  L pass / shoot",
         "",
         "Pass to a team-mate to take control of them — FIFA-style!",
-        "Players tire as they run — sub on fresh legs!",
+        "Players tire as they run — rest them to recover!",
     }
     local instrY = startY + #items * spacing + 24
     for i, line in ipairs(lines) do
