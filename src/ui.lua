@@ -240,7 +240,7 @@ function UI.drawMenu(menuOption)
     for i, opt in ipairs(options) do
         if i == menuOption then
             love.graphics.setColor(COL_YELLOW)
-            love.graphics.print("► " .. opt, 280, 220 + (i - 1) * 50)
+            love.graphics.print("> " .. opt, 280, 220 + (i - 1) * 50)
         else
             love.graphics.setColor(0.7, 0.7, 0.7)
             love.graphics.print("  " .. opt, 280, 220 + (i - 1) * 50)
@@ -251,7 +251,7 @@ function UI.drawMenu(menuOption)
     love.graphics.setFont(fontSmall)
     love.graphics.setColor(0.6, 0.6, 0.6)
     local lines = {
-        "↑ / ↓  Navigate    Enter  Select",
+        "W/S or Up/Down: Navigate    Enter: Select",
         "",
         "P1: WASD move  ·  F kick  ·  Q substitute",
         "P2: Arrows move  ·  L kick  ·  K substitute",
@@ -308,10 +308,10 @@ function UI.drawGameOver(score)
     local resultMsg
     if score[1] > score[2] then
         love.graphics.setColor(COL_RED)
-        resultMsg = Config.teamName(1) .. " wins! 🏆"
+        resultMsg = Config.teamName(1) .. " WINS!"
     elseif score[2] > score[1] then
         love.graphics.setColor(COL_BLUE)
-        resultMsg = Config.teamName(2) .. " wins! 🏆"
+        resultMsg = Config.teamName(2) .. " WINS!"
     else
         love.graphics.setColor(0.8, 0.8, 0.8)
         resultMsg = "It's a Draw!"

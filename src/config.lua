@@ -19,17 +19,17 @@ local TEAMS = {
     [2] = {
         name = "Business",
         players = {
-            { name = "Rei",     speed = 7, strength = 7, stamina = 8 },
-            { name = "Sahabub", speed = 8, strength = 8, stamina = 9 },
-            { name = "Rifa",    speed = 7, strength = 3, stamina = 6 },
+            { name = "Rei",     speed = 70, strength = 70, stamina = 80 },
+            { name = "Sahabub", speed = 80, strength = 80, stamina = 90 },
+            { name = "Rifa",    speed = 70, strength = 30, stamina = 60 },
         },
     },
     [1] = {
         name = "Tech",
         players = {
-            { name = "Mazhar", speed =  5, strength = 10, stamina = 6 },
-            { name = "Swapon", speed =  7, strength =  8, stamina = 8 },
-            { name = "Sadia",  speed = 10, strength =  2, stamina = 6 },
+            { name = "Mazhar", speed =  50, strength = 100, stamina = 60 },
+            { name = "Swapon", speed =  70, strength =  80, stamina = 80 },
+            { name = "Sadia",  speed = 100, strength =  20, stamina = 60 },
         },
     },
 }

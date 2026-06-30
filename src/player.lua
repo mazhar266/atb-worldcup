@@ -184,9 +184,11 @@ function Player:update(dt, ball)
             moveX = dx / dist
             moveY = dy / dist
         end
-        -- AI auto-kick when close enough
+        -- AI auto-kick when close enough — aim at the opponent goal so the ball
+        -- is cleared/shot downfield instead of being pinned into a corner.
         if dist <= AI_RANGE then
-            self:kick(ball)
+            local goalX = (self.team == 1) and Field.right or Field.x
+            self:kick(ball, goalX, Field.cy)
         end
         -- AI manages its own fitness: sub off a tired player for a fresh one
         if self:staminaFrac() < AI_SUB_THRESHOLD then
@@ -251,10 +253,18 @@ end
 -- Called on keypress for human kick (and every frame by the AI when close).
 -- A cooldown makes a kick a discrete action: without it the AI's per-frame
 -- auto-kick would pay KICK_COST every frame and empty its stamina in a flash.
-function Player:kick(ball)
+-- Optional aimX/aimY: kick the ball toward that point (the AI aims at the
+-- opponent goal). Without it, kick along the player→ball line so a human's kick
+-- follows the direction they are pushing.
+function Player:kick(ball, aimX, aimY)
     if self.kickCooldown > 0 then return end
     if ball:isNear(self.x, self.y, KICK_RANGE) then
-        local nx, ny = dirToBall(self.x, self.y, ball.x, ball.y)
+        local nx, ny
+        if aimX then
+            nx, ny = dirToBall(ball.x, ball.y, aimX, aimY)
+        else
+            nx, ny = dirToBall(self.x, self.y, ball.x, ball.y)
+        end
         if nx == 0 and ny == 0 then
             -- kick straight ahead toward opponent goal
             nx = (self.team == 1) and 1 or -1
