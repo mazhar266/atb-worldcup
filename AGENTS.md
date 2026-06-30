@@ -9,13 +9,11 @@ ATB WorldCup is a small arcade-style, top-down 2D football (soccer) game built w
 Key gameplay systems:
 
 - **2-player local versus** or **1-player vs AI**.
-- **Full teams on the pitch (FIFA-style)**: each side fields a **captain** plus an AI **formation** — a goalkeeper and outfield runners — so the whole team moves with play. The supporting cast lives in `src/teammate.lua` (lightweight, fixed-pace runners with no stamina/subs); it is purely additive and leaves the squad/stamina model untouched. Inspired by Code-the-Classics `soccer.py`.
-- **Pass & control-switch (FIFA-style)**: you control one player at a time (`control1`/`control2` in `src/game.lua`) — whoever is on the ball, shown by a chevron. The kick key (`F`/`L`) **passes to the best team-mate ahead and hands you control of them** (`humanKick`/`passBallTo`); control otherwise follows whoever wins a loose ball (`updatePossession`). Modelled on `soccer.py`'s `active_control_player`. Movement is decided in `game.lua` and passed into each unit's `:update(dt, ball, opts)`.
-- **3-player squads** per team (the captain): one active player on the pitch and two on the bench.
-- **Named players with attributes**: each player has `speed`, `strength`, and `stamina` (1–10), defined in the `TEAMS` table in `src/config.lua` (the single config source of truth; validated on load). Speed → run speed, strength → kick distance, stamina → max "life". `src/player.lua` derives `speedPx` / `kickPower` / `maxStamina` per member, and team names (`Config.teamName`) show in the HUD / goal / game-over UI.
-- **Difficulty modes**: the menu is two screens (`game.lua`'s `menuPage` = `"main"` → `"difficulty"`): the main screen offers *Play (1-player vs AI)* / *2 Players*, and Play opens a difficulty screen built from the `DIFFICULTIES` table in `src/config.lua` (each entry: `name` + `tagline` shown in the menu, plus AI multipliers `aiSpeed` / `aiKick`). The chosen mults are passed to `Player.new(..., aiMods)` and scale only the AI player's speed and kick power.
-- **Stamina system**: the active player tires while moving, idling, and kicking. Low stamina reduces movement speed and kick power (as a fraction of that player's own max).
-- **Substitutions**: swap the active player for the freshest bench player (`Q` for Player 1, `K` for Player 2). Bench players recover stamina while resting.
+- **Whole config squads on the pitch (FIFA-style)**: every player in a team's config squad is its own on-pitch `Player` — no anonymous extras and no goalkeeper role. With the default 3-player squads it's a literal 3-a-side of the named players. A "team" is just an array (`team1`/`team2` in `src/game.lua`), one `Player` per config entry. Inspired by Code-the-Classics `soccer.py`.
+- **Pass & control-switch (FIFA-style)**: you control one player at a time (`control1`/`control2` in `src/game.lua`) — whoever is on the ball, shown by a chevron. The kick key (`F`/`L`) **passes to the best team-mate ahead and hands you control of them** (`humanKick`/`passBallTo`); control otherwise follows whoever wins a loose ball (`updatePossession`). Modelled on `soccer.py`'s `active_control_player`. Movement is decided in `game.lua` and passed into each player's `:update(dt, ball, opts)`.
+- **Named players with attributes**: each player has `speed`, `strength`, and `stamina` (1–10), defined in the `TEAMS` table in `src/config.lua` (the single config source of truth; validated on load). Speed → run speed, strength → kick distance, stamina → max "life". `src/player.lua` derives `speedPx` / `kickPower` / `maxStamina` per player, and team names (`Config.teamName`) show in the HUD / goal / game-over UI. **The number of players you list per team is the number on the pitch.**
+- **Difficulty modes**: the menu is two screens (`game.lua`'s `menuPage` = `"main"` → `"difficulty"`): the main screen offers *Play (1-player vs AI)* / *2 Players*, and Play opens a difficulty screen built from the `DIFFICULTIES` table in `src/config.lua` (each entry: `name` + `tagline` shown in the menu, plus AI multipliers `aiSpeed` / `aiKick`). The chosen mults are passed through `buildTeam` into every AI `Player` and scale only the AI's speed and kick power.
+- **Stamina system**: every player tires while running/kicking and recovers by **resting** (standing still); low stamina reduces movement speed and kick power (as a fraction of that player's own max). There is **no bench and no substitution** — the whole squad is on the pitch.
 - **Match timer**: 90-second regulation; if the score is tied, sudden-death overtime begins (first goal wins).
 - Generated pixel-art sprites live in `assets/` and are loaded by `src/assets.lua`. Rendering falls back to simple geometric shapes if the sprites are missing.
 - Audio lives in `assets/sfx/` and is loaded/played via `src/audio.lua`: looping theme music + crowd ambience beds, a kickoff jingle, a human-only footstep loop, and one-shot effects (randomised `kick0-3` / `goal0-1`, bounce, whistle, substitute). The loader prefers OGG and falls back to the generated WAVs; missing sounds are skipped silently. The state machine in `src/game.lua` drives which beds play per state (theme on menu/gameover, crowd during play).
@@ -41,13 +39,12 @@ atb-worldcup/
 │   ├── game.lua      # State machine and main orchestrator (menu, playing, overtime, paused, goal, gameover)
 │   ├── field.lua     # Shared pitch/goal geometry and field rendering
 │   ├── ball.lua      # Ball entity: position, velocity, friction, wall bouncing
-│   ├── player.lua    # Captain entity: squad roster, attributes, movement, kick, stamina, subs, AI
-│   ├── teammate.lua  # AI formation: goalkeeper + outfield runners (chase, support, shoot)
+│   ├── player.lua    # One on-pitch config player: attributes, movement, kick, stamina, formation AI
 │   ├── goal.lua      # Goal zone detection and score state
 │   ├── ui.lua        # HUD, menu, pause overlay, goal flash, game-over screen
 │   ├── assets.lua    # Central sprite loader with fallback to shape rendering
 │   ├── audio.lua     # Music / sound effect loader and playback helpers
-│   └── config.lua    # Single config: squad rosters, names & attributes (1–10), validated on load
+│   └── config.lua    # Single config: squads, names & attributes (1–10), validated on load
 ├── assets/           # PNG sprites and audio
 │   ├── sfx/          # OGG music + effects (theme, start, crowd, move, kick0-3, goal0-1) + WAV fallbacks
 │   ├── ball.png      # Soccer ball sprite
@@ -89,7 +86,7 @@ A thin shim. Every Love2D callback (`love.load`, `love.update`, `love.draw`, `lo
 
 ### State machine (`src/game.lua`)
 
-`src/game.lua` is the single source of truth for game state. It owns all mutable match state at module level (`ball`, `player1`, `player2`, the two AI formations `mates1`/`mates2`, the controlled-unit pointers `control1`/`control2`, `timeLeft`, `isOvertime`, `menuOption`, etc.). Each frame `updateTeams(dt)` branches per side: `updateHumanTeam` moves the controlled unit by the keys and runs the rest as AI; `updateAITeam` runs the old chase/auto-kick behaviour. `updatePossession` makes control follow the ball, `humanKick`/`passBallTo` implement FIFA-style pass-and-switch, and `separateTeam` de-overlaps bodies. `resetMates()` + `resetControl()` reset positions and control on each kickoff/overtime restart.
+`src/game.lua` is the single source of truth for game state. It owns all mutable match state at module level (`ball`, the team arrays `team1`/`team2` — one `Player` per config squad member — the controlled-player pointers `control1`/`control2`, the per-team control schemes `scheme1`/`scheme2`, `timeLeft`, `isOvertime`, `menuOption`, etc.). Each frame `updateTeams(dt)` branches per side: `updateHumanTeam` moves the controlled player by the keys and runs the rest as AI; `updateAITeam` makes the player nearest the ball the lead (chase + auto-kick) and the rest hold formation. `updatePossession` makes control follow the ball, `humanKick`/`passBallTo` implement FIFA-style pass-and-switch, and `separateTeam` de-overlaps bodies. `resetTeams()` + `resetControl()` reset positions and control on each kickoff/overtime restart.
 
 States:
 
@@ -113,26 +110,24 @@ Transitions:
 
 There are two module conventions in use; be consistent with whichever a file already uses:
 
-- **Metatable OOP**: `src/ball.lua`, `src/player.lua`, and `src/teammate.lua` expose `:new()` constructors and use `__index`. Instances are created per match.
+- **Metatable OOP**: `src/ball.lua` and `src/player.lua` expose `:new()` constructors and use `__index`. Instances are created per match (one `Player` per config squad member per team).
 - **Plain-table singletons**: `src/field.lua`, `src/goal.lua`, and `src/ui.lua` return a single shared table and are called directly.
 
 Important module responsibilities:
 
 - `src/field.lua` is the **shared coordinate authority**. It defines pitch geometry (`x`, `y`, `width`, `height`, `right`, `bottom`, `cx`, `cy`, `goalTop`, `goalBottom`, `goalWidth`, `goalHeight`). Other modules read these values for boundaries, scoring, and HUD placement. Derived values are computed once at require time, so changing `Field.width` or `Field.x` at runtime will not recompute them.
 - `src/ball.lua` implements custom physics: velocity, per-frame friction (`0.98`), wall bounce, and pass-through at the goal openings. Tuning constants live at the top of the file.
-- `src/player.lua` is the most complex module — the **captain**. It handles:
-  - Movement via `:update(dt, ball, opts)`: `opts.humanMove` (driven by the keys when this captain is the controlled unit), else AI (`opts.moveTo` support point or chase the ball). `game.lua` reads the keys and decides which mode.
-  - 3-member squad roster with per-member stamina.
-  - Fatigue scaling of movement speed and kick power.
-  - Substitutions (`Player:substitute()`) with a cooldown.
-  - AI auto-substitution / per-frame auto-kick, both gated by `opts` (`autoSub`/`autoKick`).
-- `src/teammate.lua` is the AI **supporting cast** — `Teammate.formation()` builds a goalkeeper + outfield runners per side. Same `:update(dt, ball, opts)` shape as the captain, so a human can drive a team-mate when control switches to them; otherwise they chase/support/shoot in a ball-aware formation (keepers always clear). No stamina/substitution depth (those belong to the captain). Tuning constants are at the top of the file; it is purely additive and preserves the squad/stamina invariants.
+- `src/player.lua` is one on-pitch footballer (one per config squad member). It handles:
+  - Movement via `:update(dt, ball, opts)`: `opts.humanMove` (driven by the keys when this player is the controlled one), else AI — `opts.chase` (the lead: go for the ball, and with `opts.autoKick` kick toward goal when close) or, by default, hold a ball-biased formation point. `game.lua` reads the keys and decides which mode.
+  - One config identity (`name`, `number`, attributes) with its own stamina; fatigue scaling of movement speed and kick power.
+  - A formation home (`homeX/homeY`) and `faceX/faceY`+`holdoff` used by the passing logic in `game.lua`.
+  - Per-player attribute → game mapping (`*_BASE`/`*_PER`) and stamina tuning as `local` constants at the top of the file.
 - `src/goal.lua` owns the `score` table and `Goal.check(ball)` returns the scoring team index or `nil`.
 - `src/ui.lua` is pure rendering. Fonts are created in `UI.load`. HUD coordinates are hardcoded for the fixed 800×600 window.
 
 ### Core gameplay invariant (stamina persistence)
 
-`Player:reset()` only repositions the on-pitch player for kickoff. It intentionally **never** touches `roster`, `active`, or stamina. Fatigue therefore persists across goals and into overtime. Preserve this behavior if you refactor reset/kickoff logic.
+`Player:reset()` only repositions the player to its formation home for kickoff. It intentionally **never** touches `stamina`. Fatigue therefore persists across goals and into overtime. Preserve this behavior if you refactor reset/kickoff logic.
 
 ## Controls
 
@@ -145,7 +140,6 @@ Important module responsibilities:
 | Move Left      | `A`            | `←` (Left Arrow)|
 | Move Right     | `D`            | `→` (Right Arrow)|
 | Pass / Shoot   | `F`            | `L`             |
-| Substitute     | `Q`            | `K`             |
 
 ### Menu / Global
 
@@ -172,8 +166,8 @@ There is **no automated test suite, linter, or CI pipeline** in this repository.
 Validate changes by:
 
 1. Running the game with `love .`.
-2. Playing through the affected flow (menu navigation, match timer, scoring, overtime, pause/restart, substitutions, AI behavior).
-3. Checking the HUD renders correctly (score, timer, stamina bars, bench pips, goal flash, game-over screen).
+2. Playing through the affected flow (menu navigation, match timer, scoring, overtime, pause/restart, passing & control-switch, AI behavior).
+3. Checking the HUD renders correctly (score, timer, the per-team stamina panel + control chevron, goal flash, game-over screen).
 
 If you add new behavior that can be unit-tested outside Love2D, prefer to keep such code in pure functions that do not depend on `love.*` globals, but no test harness currently exists.
 

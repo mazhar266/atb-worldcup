@@ -96,17 +96,17 @@ Every player has three attributes on a **1–10** scale, defined in
 | `strength` | How far they kick the ball                              |
 | `stamina`  | Their "life" — maximum energy; drains as they play      |
 
-The default rosters (team 1 = left/red, team 2 = right/blue):
+The default squads (team 1 = left/red, team 2 = right/blue):
 
-| Business (Red)    | Speed | Strength | Stamina |    | Tech (Blue)        | Speed | Strength | Stamina |
+| Tech (Red)        | Speed | Strength | Stamina |    | Business (Blue)    | Speed | Strength | Stamina |
 |-------------------|:-----:|:--------:|:-------:|----|--------------------|:-----:|:--------:|:-------:|
-| Rei               |   7   |     7    |    8    |    | Mazhar             |    5  |    10    |    6    |
-| Sahabub           |   8   |     8    |    9    |    | Swapon             |    7  |     8    |    8    |
-| Rifa              |   7   |     3    |    6    |    | Sadia              |   10  |     2    |    6    |
+| Mazhar            |   5   |    10    |    6    |    | Rei                |    7  |     7    |    8    |
+| Swapon            |   7   |     8    |    8    |    | Sahabub            |    8  |     8    |    9    |
+| Sadia             |  10   |     2    |    6    |    | Rifa               |    7  |     3    |    6    |
 
 Edit the team names, player names, and stats in the `TEAMS` table at the top of
 `src/config.lua` — the loader validates them and clamps each attribute to 1–10.
-The active player's name and stats are shown in the HUD, and the team names
+Each player's name and stamina are shown in the corner panel, and the team names
 appear in the HUD, on goals, and on the final score.
 
 ## Difficulty
