@@ -37,7 +37,7 @@ Inputs are only honored in the states where they make sense (e.g. kick/substitut
 The other `src/` modules split into two coexisting conventions — be consistent with whichever a file
 already uses:
 - **Metatable OOP** (`:new`, `__index`): `src/ball.lua`, `src/player.lua` — instantiated per match.
-- **Plain-table singletons**: `src/field.lua`, `src/goal.lua`, `src/ui.lua`, `src/assets.lua`, `src/audio.lua` — stateless-ish shared modules.
+- **Plain-table singletons**: `src/field.lua`, `src/goal.lua`, `src/ui.lua`, `src/assets.lua`, `src/audio.lua`, `src/config.lua` — stateless-ish shared modules.
 
 `src/field.lua` is the **shared coordinate authority**: pitch/goal geometry (`x`, `y`, `right`, `bottom`,
 `cx`, `cy`, `goalTop`, `goalBottom`, `goalWidth`, …). `ball.lua`, `player.lua`, `goal.lua`, and `ui.lua`
@@ -63,8 +63,18 @@ is just a hint that the large theme is loaded as a streaming source.
 ## Squad / stamina / substitution model (the main gameplay system)
 
 Each team is a **3-player squad**, not a single player. A `Player` object is a *pitch slot* that owns the
-position/velocity (`x`, `y`, `vx`, `vy`); its `roster` is an array of members `{stamina, number}` and
-`active` indexes the member currently on the pitch. Only the active member is controlled and drawn.
+position/velocity (`x`, `y`, `vx`, `vy`); its `roster` is an array of members and `active` indexes the
+member currently on the pitch. Only the active member is controlled and drawn.
+
+**Per-player attributes come from a config file.** `src/config.lua` is the single source of truth: its
+`TEAMS` table (validated on load) gives every player a `name` and `speed`/`strength`/`stamina` on a 1–10
+scale, plus a per-team `name` (`Config.teamName`, shown in the HUD / goal flash / game-over). `Player.new`
+derives, per member: `speedPx` (run speed), `kickPower` (kick distance), and `maxStamina` (life capacity)
+via the `*_BASE`/`*_PER` mapping constants at the top of `src/player.lua` — edit names/stats in
+`src/config.lua`, edit the attribute→game mapping in `player.lua`. Stamina is capped at each
+member's own `maxStamina`; drain is absolute points/sec (so high-stamina players last longer) while the
+fatigue speed/kick multipliers and the AI auto-sub thresholds work on the stamina **fraction** of each
+member's own max, so unequal squads compare fairly.
 
 - Stamina drains for the active member (move/idle/kick) and **regenerates for benched members**, clamped to
   `[0, 100]`. Low stamina linearly scales down movement speed and kick power (with floors).
@@ -73,7 +83,8 @@ position/velocity (`x`, `y`, `vx`, `vy`); its `roster` is an array of members `{
 - **Invariant:** `Player:reset()` only repositions for kickoff — it must never touch `roster`/`active`/
   stamina, so fatigue persists across goals and into overtime. Preserve this if you refactor reset/kickoff.
 - All gameplay tuning lives as `local` constants at the top of `src/player.lua` (drain/regen rates, kick
-  cost, cooldown, speed/kick floors, squad size) and `src/ball.lua` (friction, kick power). Tweak feel there.
+  cost, cooldown, speed/kick floors, attribute→game mapping) and `src/ball.lua` (friction). Squad size,
+  team/player names, and per-player stats come from the `TEAMS` table in `src/config.lua`, not constants.
 - `src/ui.lua` reads `Player` internals (`roster`, `active`, `subCooldown`) directly to draw the fitness
   panel; if you change the roster shape, update the UI accordingly.
 

@@ -6,7 +6,9 @@ An arcade-style 2D football game built with [LÖVE2D](https://love2d.org/) (Love
 
 - Arcade-style 2D football (soccer) gameplay
 - 2-player local versus mode or 1-player vs AI
-- **Squad & substitutions** — each team has a 3-player squad (1 on the pitch, 2 on the bench)
+- **Named squads with attributes** — each of the 3 players per team has **speed**, **strength**, and **stamina** ratings (1–10), all editable in [`src/config.lua`](src/config.lua)
+- **Speed** sets how fast a player runs · **Strength** sets how far they kick the ball · **Stamina** is their "life" (maximum energy)
+- **Squad & substitutions** — 1 player on the pitch, 2 on the bench; the active player's name and stats show in the HUD
 - **Stamina system** — the active player tires while running and kicking; tired players move slower and kick weaker
 - **Fresh legs** — substitute the active player for a rested one on the bench; benched players recover stamina (the AI manages its own subs too)
 - Simple ball physics with velocity and friction
@@ -66,6 +68,30 @@ An arcade-style 2D football game built with [LÖVE2D](https://love2d.org/) (Love
 | `R`          | Restart (from pause)    |
 | `Escape`     | Quit to menu            |
 
+## Squads & Attributes
+
+Each team is a 3-player squad. Every player has three attributes on a **1–10**
+scale, defined in [`src/config.lua`](src/config.lua):
+
+| Attribute  | Effect in game                                          |
+|------------|---------------------------------------------------------|
+| `speed`    | How fast the player runs                                |
+| `strength` | How far they kick the ball                              |
+| `stamina`  | Their "life" — maximum energy; drains as they play      |
+
+The default rosters (team 1 = left/red, team 2 = right/blue):
+
+| Business (Red)    | Speed | Strength | Stamina |    | Tech (Blue)        | Speed | Strength | Stamina |
+|-------------------|:-----:|:--------:|:-------:|----|--------------------|:-----:|:--------:|:-------:|
+| Rei               |   7   |     7    |    8    |    | Mazhar             |    5  |    10    |    6    |
+| Sahabub           |   8   |     8    |    9    |    | Swapon             |    7  |     8    |    8    |
+| Rifa              |   7   |     3    |    6    |    | Sadia              |   10  |     2    |    6    |
+
+Edit the team names, player names, and stats in the `TEAMS` table at the top of
+`src/config.lua` — the loader validates them and clamps each attribute to 1–10.
+The active player's name and stats are shown in the HUD, and the team names
+appear in the HUD, on goals, and on the final score.
+
 ## Project Structure
 
 ```
@@ -80,7 +106,8 @@ atb-worldcup/
 │   ├── goal.lua      # Goal zones and scoring
 │   ├── ui.lua        # HUD, menus, and overlays
 │   ├── assets.lua    # Central sprite loader
-│   └── audio.lua     # Music / sound effect loader and playback
+│   ├── audio.lua     # Music / sound effect loader and playback
+│   └── config.lua    # Squad rosters, names & per-player attributes (edit here)
 ├── assets/           # PNG sprites and audio
 │   └── sfx/          # OGG music + effects (WAV fallbacks for a few cues)
 ├── tools/

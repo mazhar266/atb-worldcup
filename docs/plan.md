@@ -23,10 +23,11 @@ game that ATB colleagues can enjoy during breaks.
 The on-pitch player is the only member controlled at any time. Fatigue turns
 squad rotation into the core strategic layer:
 
-- The active player has a **stamina** value (0–100). It drains faster while
-  moving and a flat amount per kick; it ticks down slowly even while standing.
+- Each player has a **stamina** bar whose maximum is set by their stamina
+  attribute (see below). It drains faster while moving and a flat amount per
+  kick; it ticks down slowly even while standing.
 - Low stamina **slows movement** (down to ~55% speed at empty) and **weakens
-  kicks** (down to ~60% power at empty).
+  kicks** (down to ~60% power at empty), as a fraction of that player's own max.
 - Pressing the **substitute** key swaps the active player for the freshest
   player on the bench. The pitch position is kept, so control is seamless.
 - Benched players **recover stamina** while resting. A short cooldown
@@ -34,9 +35,33 @@ squad rotation into the core strategic layer:
 - The AI manages its own fitness: it automatically subs a tired player off when
   a sufficiently rested replacement is available.
 
-**Tuning constants** (in `src/player.lua`): squad size 3 · move-drain 5/s ·
-idle-drain 1.5/s · kick cost 8 · kick cooldown 0.3 s · bench regen 6/s ·
-sub cooldown 1.2 s · min speed 55% · min kick 60%.
+**Tuning constants** (in `src/player.lua`): move-drain 5/s · idle-drain 1.5/s ·
+kick cost 8 · kick cooldown 0.3 s · bench regen 6/s · sub cooldown 1.2 s ·
+min speed 55% · min kick 60%.
+
+### Player Attributes & Config
+
+Each player is named and rated on a **1–10** scale for three attributes, defined
+in the `TEAMS` table in [`src/config.lua`](../src/config.lua) — the single config
+source of truth, validated on load (out-of-range values are clamped, missing
+fields defaulted) so a hand-edit can't crash the game. Each team also has a
+display `name` (`Config.teamName`), shown in the HUD, on goals, and on full time:
+
+| Attribute  | Drives          | Mapping (in `src/player.lua`)                     |
+|------------|-----------------|---------------------------------------------------|
+| `speed`    | run speed       | `SPEED_BASE + attr·SPEED_PER` → 110–200 px/s       |
+| `strength` | kick distance   | `KICK_BASE + attr·KICK_PER` → 230–500 impulse      |
+| `stamina`  | max stamina/life| `attr·STAMINA_PER` → 10–100 capacity                |
+
+Each squad member carries its own derived `speedPx`, `kickPower`, and
+`maxStamina`. Because drain is in absolute points/sec but `maxStamina` scales
+with the attribute, high-stamina players simply last longer; speed/kick fatigue
+and the AI's auto-sub thresholds all work on the **fraction** of each player's
+own max, so squads with different staminas compare fairly.
+
+Default rosters *(speed/strength/stamina)* — team 1 **Business** (left/red):
+Rei (7/7/8), Sahabub (8/8/9), Rifa (7/3/6); team 2 **Tech** (right/blue):
+Mazhar (5/10/6), Swapon (7/8/8), Sadia (10/2/6).
 
 ### Visual Style
 
@@ -60,9 +85,11 @@ sub cooldown 1.2 s · min speed 55% · min kick 60%.
 | `src/game.lua`    | Game state machine (menu → playing → paused → over) |
 | `src/field.lua`   | Draw pitch, centre circle, halfway line, goal boxes |
 | `src/ball.lua`    | Ball position, velocity, friction, wall bouncing    |
-| `src/player.lua`  | Squad roster, movement, kick, stamina, substitutions, AI |
+| `src/player.lua`  | Squad roster, attributes, movement, kick, stamina, subs, AI |
 | `src/goal.lua`    | Goal zone rectangles, collision detection, scoring  |
-| `src/ui.lua`      | HUD (score, timer, stamina), menu screen, game-over screen |
+| `src/ui.lua`      | HUD (score, timer, stamina, names/stats), menu, game-over |
+| `src/config.lua`  | Single config source: team/player names + attributes (1–10) |
+| `src/audio.lua`   | Music / SFX loader and playback (OGG, WAV fallback) |
 
 ### Game States
 
@@ -195,14 +222,19 @@ crowd and movement loop and unpausing resumes them. The movement loop follows
 - **Ball friction**: Ball velocity multiplied by `0.98` each frame (60 fps)
 - **Wall bounce**: Ball reflects off field boundary walls; goals pass through
   the goal opening
-- **Stamina**: Per-member value 0–100. The active member drains
-  `DRAIN_MOVE`/s while moving (`DRAIN_IDLE`/s otherwise) plus `KICK_COST` per
-  kick; bench members regenerate `REGEN_BENCH`/s. Speed and kick power scale
-  linearly with the active member's stamina fraction (floored at
-  `MIN_SPEED_MUL` / `MIN_KICK_MUL`). Stamina **persists** across goal kickoffs
-  and into overtime — only `Player:reset()` repositions, it never refills.
-- **Substitution**: `Player:substitute()` selects the highest-stamina bench
-  member and makes it active in the same pitch slot, gated by `SUB_COOLDOWN`.
+- **Attributes**: Each member's `speed`/`strength`/`stamina` (1–10) map to a
+  derived `speedPx` (run speed), `kickPower` (kick impulse / distance), and
+  `maxStamina` (life capacity). See *Player Attributes & Config* above.
+- **Stamina**: Per-member, capped at that member's own `maxStamina`. The active
+  member drains `DRAIN_MOVE`/s while moving (`DRAIN_IDLE`/s otherwise) plus
+  `KICK_COST` per kick; bench members regenerate `REGEN_BENCH`/s up to their max.
+  Speed and kick power scale linearly with the active member's stamina
+  **fraction** (floored at `MIN_SPEED_MUL` / `MIN_KICK_MUL`). Stamina
+  **persists** across goal kickoffs and into overtime — only `Player:reset()`
+  repositions, it never refills.
+- **Substitution**: `Player:substitute()` selects the freshest bench member (by
+  stamina fraction) and makes it active in the same pitch slot, gated by
+  `SUB_COOLDOWN`.
 - **Kick cooldown**: `Player:kick()` is gated by `KICK_COOLDOWN` so a kick is a
   discrete action. The AI auto-kicks every frame it is near the ball; without
   the cooldown the per-kick stamina cost would be paid every frame and drain a

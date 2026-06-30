@@ -2,6 +2,7 @@
 
 local Field = require("src.field")
 local Assets = require("src.assets")
+local Config = require("src.config")
 
 local UI = {}
 
@@ -29,39 +30,38 @@ end
 -- ─── HUD ────────────────────────────────────────────────────────────────────
 
 function UI.drawHUD(score, timeLeft, isOvertime)
-    -- Background strip
+    -- Background strip (flush with the field top at y=60)
     love.graphics.setColor(COL_HUD_BG)
-    love.graphics.rectangle("fill", 0, 0, 800, 50)
+    love.graphics.rectangle("fill", 0, 0, 800, 60)
 
-    -- Score
+    -- Score (centred, top)
     local scoreText = score[1] .. "  –  " .. score[2]
     love.graphics.setFont(fontLarge)
     love.graphics.setColor(COL_WHITE)
     local tw = fontLarge:getWidth(scoreText)
     love.graphics.print(scoreText, (800 - tw) / 2, 2)
 
-    -- Player labels
-    love.graphics.setFont(fontSmall)
-    love.graphics.setColor(COL_RED)
-    love.graphics.print("P1", 20, 16)
-    love.graphics.setColor(COL_BLUE)
-    love.graphics.print("P2", 760, 16)
-
-    -- Timer / overtime indicator
+    -- Timer / overtime indicator (top-right)
     love.graphics.setFont(fontMedium)
     if isOvertime then
         love.graphics.setColor(COL_YELLOW)
         local otStr = "OVERTIME"
-        local otw = fontMedium:getWidth(otStr)
-        love.graphics.print(otStr, 800 - otw - 20, 14)
+        love.graphics.print(otStr, 800 - fontMedium:getWidth(otStr) - 20, 8)
     else
         local mins = math.floor(timeLeft / 60)
         local secs = math.floor(timeLeft % 60)
         local timeStr = string.format("%d:%02d", mins, secs)
         love.graphics.setColor(timeLeft <= 10 and COL_YELLOW or COL_WHITE)
-        local ttw = fontMedium:getWidth(timeStr)
-        love.graphics.print(timeStr, 800 - ttw - 20, 14)
+        love.graphics.print(timeStr, 800 - fontMedium:getWidth(timeStr) - 20, 8)
     end
+
+    -- Team names (bottom corners, colour-coded by side)
+    love.graphics.setFont(fontSmall)
+    love.graphics.setColor(COL_RED)
+    love.graphics.print(Config.teamName(1), 20, 40)
+    local name2 = Config.teamName(2)
+    love.graphics.setColor(COL_BLUE)
+    love.graphics.print(name2, 800 - fontSmall:getWidth(name2) - 20, 40)
 end
 
 -- ─── Stamina / squad widget ───────────────────────────────────────────────────
@@ -108,41 +108,63 @@ local function drawSquadPanel(p, alignRight, subKey)
     local PIPW, PIPH = 34, 5
     local x0 = alignRight and (Field.right - 10 - BARW) or (Field.x + 10)
     local y0 = Field.y + 8
-    local pipY = y0 + BARH + 4
-    local hintY = pipY + PIPH + 5
     local hasHint = (p.control ~= "ai")
 
     love.graphics.setFont(fontTiny)
-    local numStr  = "#" .. p:activeMember().number
-    local numW    = fontTiny:getWidth(numStr)
+    local lineH = fontTiny:getHeight()
 
-    -- Opaque backing so moving sprites can't bleed through the panel. Spans the
-    -- bar, the jersey badge beside it, the bench pips, and the (optional) hint.
-    local pad  = 5
-    local bgL  = alignRight and (x0 - 6 - numW) or x0
-    local bgR  = alignRight and (x0 + BARW) or (x0 + BARW + 6 + numW)
-    local bgB  = hasHint and (hintY + fontTiny:getHeight()) or (pipY + PIPH)
+    local m0      = p:activeMember()
+    local name    = m0.name or ("#" .. tostring(m0.number or "?"))
+    local attrStr = string.format("SPD %d  STR %d  STA %d",
+        m0.attrSpeed or 0, m0.attrStrength or 0, m0.attrStamina or 0)
+    local nameW   = fontTiny:getWidth(name)
+    local attrW   = fontTiny:getWidth(attrStr)
+
+    -- Vertical layout: stamina bar → attribute line → bench pips → sub hint
+    local attrY = y0 + BARH + 3
+    local pipY  = attrY + lineH + 4
+    local hintY = pipY + PIPH + 4
+
+    -- Opaque backing so moving sprites can't bleed through the panel.
+    local pad = 5
+    local bgL, bgR
+    if alignRight then
+        bgL = math.min(x0 - 6 - nameW, x0 + BARW - attrW)
+        bgR = x0 + BARW
+    else
+        bgL = x0
+        bgR = math.max(x0 + BARW + 6 + nameW, x0 + attrW)
+    end
+    local bgB = hasHint and (hintY + lineH) or (pipY + PIPH)
     love.graphics.setColor(COL_PANEL_BG)
     love.graphics.rectangle("fill", bgL - pad, y0 - pad, (bgR - bgL) + pad * 2, (bgB - y0) + pad * 2, 4, 4)
 
-    -- Active player's stamina
+    -- Active player's stamina bar
     local frac = p:staminaFrac()
     drawBar(x0, y0, BARW, BARH, frac, staminaColor(frac), alignRight)
 
-    -- Active jersey number badge beside the bar
-    love.graphics.setColor(1, 1, 1, 0.9)
+    -- Active player's name beside the bar
+    love.graphics.setColor(1, 1, 1, 0.95)
     if alignRight then
-        love.graphics.print(numStr, x0 - numW - 6, y0 - 2)
+        love.graphics.print(name, x0 - nameW - 6, y0 - 2)
     else
-        love.graphics.print(numStr, x0 + BARW + 6, y0 - 2)
+        love.graphics.print(name, x0 + BARW + 6, y0 - 2)
     end
 
-    -- Bench pips (resting players recovering stamina), colour-coded by level so
-    -- the freshest sub — the one substitute() will bring on — reads at a glance.
+    -- Attribute readout (speed / strength / stamina, 1–10 scale)
+    love.graphics.setColor(0.72, 0.74, 0.8)
+    if alignRight then
+        love.graphics.print(attrStr, x0 + BARW - attrW, attrY)
+    else
+        love.graphics.print(attrStr, x0, attrY)
+    end
+
+    -- Bench pips, colour-coded by each member's stamina fraction so the freshest
+    -- sub — the one substitute() will bring on — reads at a glance.
     local benchIdx = 0
     for i, m in ipairs(p.roster) do
         if i ~= p.active then
-            local pf = m.stamina / 100
+            local pf = (m.maxStamina and m.maxStamina > 0) and (m.stamina / m.maxStamina) or 0
             local px = alignRight
                 and (x0 + BARW - PIPW - benchIdx * (PIPW + 6))
                 or  (x0 + benchIdx * (PIPW + 6))
@@ -178,7 +200,7 @@ function UI.drawGoalFlash(team, alpha)
     local tw  = fontLarge:getWidth(msg)
     love.graphics.print(msg, (800 - tw) / 2, 250)
     love.graphics.setFont(fontMedium)
-    local sub = (team == 1) and "Team Red scores!" or "Team Blue scores!"
+    local sub = Config.teamName(team) .. " scores!"
     local sw  = fontMedium:getWidth(sub)
     love.graphics.setColor(team == 1 and COL_RED or COL_BLUE)
     love.graphics.print(sub, (800 - sw) / 2, 300)
@@ -286,10 +308,10 @@ function UI.drawGameOver(score)
     local resultMsg
     if score[1] > score[2] then
         love.graphics.setColor(COL_RED)
-        resultMsg = "Team Red wins! 🏆"
+        resultMsg = Config.teamName(1) .. " wins! 🏆"
     elseif score[2] > score[1] then
         love.graphics.setColor(COL_BLUE)
-        resultMsg = "Team Blue wins! 🏆"
+        resultMsg = Config.teamName(2) .. " wins! 🏆"
     else
         love.graphics.setColor(0.8, 0.8, 0.8)
         resultMsg = "It's a Draw!"

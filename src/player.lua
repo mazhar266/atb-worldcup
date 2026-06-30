@@ -3,41 +3,55 @@
 local Field  = require("src.field")
 local Assets = require("src.assets")
 local Audio  = require("src.audio")
+local Config = require("src.config")
 
 local Player = {}
 Player.__index = Player
 
-local SPEED        = 160   -- px per second (at full stamina)
-local KICK_POWER   = 420   -- impulse magnitude (at full stamina)
-local KICK_RANGE   = 40    -- px – how close the player must be to kick
-local KICK_COOLDOWN = 0.3  -- min seconds between kicks (rate-limits the AI's
-                           -- per-frame auto-kick so it spends stamina sanely)
-local RADIUS       = 14    -- visual radius
+local KICK_RANGE    = 40    -- px – how close the player must be to kick
+local KICK_COOLDOWN = 0.3   -- min seconds between kicks (rate-limits the AI's
+                            -- per-frame auto-kick so it spends stamina sanely)
+local RADIUS        = 14    -- visual radius
+local AI_RANGE      = 35    -- AI auto-kick reach
 
--- AI reaction parameters
-local AI_SPEED   = 130
-local AI_RANGE   = 35
+-- ─── Per-player attribute → game mapping (attributes are a 1–10 scale) ────────
+-- speed    → run speed in px/sec
+-- strength → kick impulse (how far the ball travels)
+-- stamina  → maximum stamina ("life")
+local SPEED_BASE  = 100   -- px/s at speed 0      → attr 1..10 maps to 110..200
+local SPEED_PER   = 10
+local KICK_BASE   = 200   -- impulse at strength 0 → attr 1..10 maps to 230..500
+local KICK_PER    = 30
+local STAMINA_PER = 10    -- max stamina per stamina point → attr 1..10 = 10..100
+
+local function speedToPx(attr)      return SPEED_BASE + attr * SPEED_PER end
+local function strengthToKick(attr) return KICK_BASE  + attr * KICK_PER  end
+local function staminaToMax(attr)   return attr * STAMINA_PER end
 
 -- ─── Stamina / substitution tuning ───────────────────────────────────────────
-local SQUAD_SIZE      = 3      -- players per team (1 on pitch + 2 on the bench)
-local MAX_STAMINA     = 100
-local DRAIN_MOVE      = 5.0    -- stamina/sec drained while the active player moves
-local DRAIN_IDLE      = 1.5    -- stamina/sec drained while the active player stands
-local KICK_COST       = 8      -- stamina spent per kick
-local REGEN_BENCH     = 6.0    -- stamina/sec recovered while resting on the bench
-local SUB_COOLDOWN    = 1.2    -- seconds enforced between substitutions
-local MIN_SPEED_MUL   = 0.55   -- movement speed multiplier at 0 stamina
-local MIN_KICK_MUL    = 0.60   -- kick power multiplier at 0 stamina
+local DRAIN_MOVE    = 5.0    -- stamina/sec drained while the active player moves
+local DRAIN_IDLE    = 1.5    -- stamina/sec drained while the active player stands
+local KICK_COST     = 8      -- stamina spent per kick
+local REGEN_BENCH   = 6.0    -- stamina/sec recovered while resting on the bench
+local SUB_COOLDOWN  = 1.2    -- seconds enforced between substitutions
+local MIN_SPEED_MUL = 0.55   -- movement speed multiplier at 0 stamina
+local MIN_KICK_MUL  = 0.60   -- kick power multiplier at 0 stamina
 
--- AI substitution behaviour
-local AI_SUB_THRESHOLD = 35    -- AI subs when its active player drops below this
-local AI_SUB_TARGET    = 70    -- ...and a bench player has at least this much
+-- AI substitution behaviour, as a fraction of the player's own max stamina
+local AI_SUB_THRESHOLD = 0.35  -- AI subs when active stamina drops below this frac
+local AI_SUB_TARGET    = 0.70  -- ...and a bench player is at least this fresh
 
--- Jersey numbers per team, purely cosmetic flavour
+-- Jersey numbers per team for the on-pitch badge (cosmetic)
 local JERSEYS = {
     [1] = {9, 7, 11},
     [2] = {10, 8, 4},
 }
+
+-- Stamina fraction (0..1) of a roster member, guarding against a zero max
+local function memberFrac(m)
+    if not m.maxStamina or m.maxStamina <= 0 then return 0 end
+    return m.stamina / m.maxStamina
+end
 
 function Player.new(team, controlScheme)
     -- team: 1 = left/red, 2 = right/blue
@@ -47,12 +61,21 @@ function Player.new(team, controlScheme)
     self.control = controlScheme
     self.radius  = RADIUS
 
-    -- Build the squad: a roster of members, each with their own stamina.
+    -- Build the squad from the config: each member carries its own attributes,
+    -- the derived speed/kick/max-stamina, and current stamina (starting full).
     self.roster = {}
-    for i = 1, SQUAD_SIZE do
+    for i, p in ipairs(Config.squad(team)) do
+        local maxStamina = staminaToMax(p.stamina)
         self.roster[i] = {
-            stamina = MAX_STAMINA,
-            number  = (JERSEYS[team] and JERSEYS[team][i]) or i,
+            name         = p.name,
+            attrSpeed    = p.speed,
+            attrStrength = p.strength,
+            attrStamina  = p.stamina,
+            speedPx      = speedToPx(p.speed),       -- run speed (px/s)
+            kickPower    = strengthToKick(p.strength), -- kick impulse
+            maxStamina   = maxStamina,
+            stamina      = maxStamina,
+            number       = (JERSEYS[team] and JERSEYS[team][i]) or i,
         }
     end
     self.active       = 1     -- index of the member currently on the pitch
@@ -93,20 +116,25 @@ function Player:activeMember()
     return self.roster[self.active]
 end
 
--- Stamina of the on-pitch member as a 0..1 fraction
+-- Stamina of the on-pitch member as a 0..1 fraction of its own max
 function Player:staminaFrac()
-    return self:activeMember().stamina / MAX_STAMINA
+    return memberFrac(self:activeMember())
 end
 
--- Index of the freshest bench member (highest stamina), or nil if none
+-- Index and fraction of the freshest bench member (highest stamina fraction),
+-- or nil if none. Fraction (not raw points) so squads with different max
+-- staminas compare fairly.
 function Player:freshestBench()
-    local bestIdx, bestStamina
+    local bestIdx, bestFrac
     for i, m in ipairs(self.roster) do
-        if i ~= self.active and (not bestStamina or m.stamina > bestStamina) then
-            bestIdx, bestStamina = i, m.stamina
+        if i ~= self.active then
+            local f = memberFrac(m)
+            if not bestFrac or f > bestFrac then
+                bestIdx, bestFrac = i, f
+            end
         end
     end
-    return bestIdx, bestStamina
+    return bestIdx, bestFrac
 end
 
 -- Swap the on-pitch member with the freshest bench member. The pitch slot
@@ -161,15 +189,16 @@ function Player:update(dt, ball)
             self:kick(ball)
         end
         -- AI manages its own fitness: sub off a tired player for a fresh one
-        if self:activeMember().stamina < AI_SUB_THRESHOLD then
-            local _, benchStamina = self:freshestBench()
-            if benchStamina and benchStamina >= AI_SUB_TARGET then
+        if self:staminaFrac() < AI_SUB_THRESHOLD then
+            local _, benchFrac = self:freshestBench()
+            if benchFrac and benchFrac >= AI_SUB_TARGET then
                 self:substitute()
             end
         end
     end
 
-    -- Fatigue scales movement speed
+    -- Fatigue scales movement speed; base speed comes from the player's attribute
+    local member   = self:activeMember()
     local frac     = self:staminaFrac()
     local speedMul = MIN_SPEED_MUL + (1 - MIN_SPEED_MUL) * frac
 
@@ -178,17 +207,16 @@ function Player:update(dt, ball)
     local isMoving = len > 0
     self.moving = isMoving   -- read by the audio layer for the movement loop
     if isMoving then
-        local spd = ((self.control == "ai") and AI_SPEED or SPEED) * speedMul
+        local spd = member.speedPx * speedMul
         self.x = self.x + (moveX / len) * spd * dt
         self.y = self.y + (moveY / len) * spd * dt
     end
 
-    -- Drain the active member; regenerate everyone on the bench
-    local active = self:activeMember()
-    active.stamina = math.max(0, active.stamina - (isMoving and DRAIN_MOVE or DRAIN_IDLE) * dt)
+    -- Drain the active member; regenerate everyone on the bench (to its own max)
+    member.stamina = math.max(0, member.stamina - (isMoving and DRAIN_MOVE or DRAIN_IDLE) * dt)
     for i, m in ipairs(self.roster) do
         if i ~= self.active then
-            m.stamina = math.min(MAX_STAMINA, m.stamina + REGEN_BENCH * dt)
+            m.stamina = math.min(m.maxStamina, m.stamina + REGEN_BENCH * dt)
         end
     end
 
@@ -209,7 +237,7 @@ function Player:update(dt, ball)
         ball.x = ball.x + nx * overlap
         ball.y = ball.y + ny * overlap
         -- Transfer some of the player's movement energy (also fatigue-scaled)
-        local effSpeed = SPEED * speedMul
+        local effSpeed = member.speedPx * speedMul
         local relVx = ball.vx - (moveX * effSpeed)
         local relVy = ball.vy - (moveY * effSpeed)
         local dot = relVx * nx + relVy * ny
@@ -231,12 +259,13 @@ function Player:kick(ball)
             -- kick straight ahead toward opponent goal
             nx = (self.team == 1) and 1 or -1
         end
+        local member  = self:activeMember()
         local kickMul = MIN_KICK_MUL + (1 - MIN_KICK_MUL) * self:staminaFrac()
-        ball:applyImpulse(nx * KICK_POWER * kickMul, ny * KICK_POWER * kickMul)
+        -- Strength sets how far the ball travels; fatigue scales it down
+        ball:applyImpulse(nx * member.kickPower * kickMul, ny * member.kickPower * kickMul)
 
         -- Kicking costs stamina and arms the cooldown
-        local active = self:activeMember()
-        active.stamina = math.max(0, active.stamina - KICK_COST)
+        member.stamina = math.max(0, member.stamina - KICK_COST)
         self.kickCooldown = KICK_COOLDOWN
         Audio.playKick()
     end
