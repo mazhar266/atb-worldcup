@@ -6,6 +6,7 @@ An arcade-style 2D football game built with [LÖVE2D](https://love2d.org/) (Love
 
 - Arcade-style 2D football (soccer) gameplay
 - 2-player local versus mode or 1-player vs AI
+- **Difficulty modes** — Easy / Medium / Hard (with custom taglines) scale the AI's speed and kicking; names, taglines, and tuning all editable in [`src/config.lua`](src/config.lua)
 - **Named squads with attributes** — each of the 3 players per team has **speed**, **strength**, and **stamina** ratings (1–10), all editable in [`src/config.lua`](src/config.lua)
 - **Speed** sets how fast a player runs · **Strength** sets how far they kick the ball · **Stamina** is their "life" (maximum energy)
 - **Squad & substitutions** — 1 player on the pitch, 2 on the bench; the active player's name and stats show in the HUD
@@ -91,6 +92,28 @@ Edit the team names, player names, and stats in the `TEAMS` table at the top of
 `src/config.lua` — the loader validates them and clamps each attribute to 1–10.
 The active player's name and stats are shown in the HUD, and the team names
 appear in the HUD, on goals, and on the final score.
+
+## Difficulty
+
+The menu is two screens. The main screen picks the mode:
+
+```
+> Play  (1 Player vs AI)
+  2 Players  (local)
+```
+
+Choosing **Play** opens the difficulty screen (press `Esc` to go back):
+
+```
+> Easy  (Chhote bachche ho keya!)
+  Medium  (We are Friends)
+  Hard  (Beak your legs)
+```
+
+Each difficulty scales the AI opponent — `aiSpeed` (how fast it runs) and
+`aiKick` (how hard it kicks). The names, taglines, and multipliers live in the
+`DIFFICULTIES` table in [`src/config.lua`](src/config.lua); add or rename modes
+freely and the difficulty screen adapts. Difficulty only affects the AI.
 
 ## Project Structure
 

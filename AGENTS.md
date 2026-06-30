@@ -11,6 +11,7 @@ Key gameplay systems:
 - **2-player local versus** or **1-player vs AI**.
 - **3-player squads** per team: one active player on the pitch and two on the bench.
 - **Named players with attributes**: each player has `speed`, `strength`, and `stamina` (1–10), defined in the `TEAMS` table in `src/config.lua` (the single config source of truth; validated on load). Speed → run speed, strength → kick distance, stamina → max "life". `src/player.lua` derives `speedPx` / `kickPower` / `maxStamina` per member, and team names (`Config.teamName`) show in the HUD / goal / game-over UI.
+- **Difficulty modes**: the menu is two screens (`game.lua`'s `menuPage` = `"main"` → `"difficulty"`): the main screen offers *Play (1-player vs AI)* / *2 Players*, and Play opens a difficulty screen built from the `DIFFICULTIES` table in `src/config.lua` (each entry: `name` + `tagline` shown in the menu, plus AI multipliers `aiSpeed` / `aiKick`). The chosen mults are passed to `Player.new(..., aiMods)` and scale only the AI player's speed and kick power.
 - **Stamina system**: the active player tires while moving, idling, and kicking. Low stamina reduces movement speed and kick power (as a fraction of that player's own max).
 - **Substitutions**: swap the active player for the freshest bench player (`Q` for Player 1, `K` for Player 2). Bench players recover stamina while resting.
 - **Match timer**: 90-second regulation; if the score is tied, sudden-death overtime begins (first goal wins).

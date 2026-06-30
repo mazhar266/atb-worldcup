@@ -35,12 +35,30 @@ local TEAMS = {
 }
 -- ─────────────────────────────────────────────────────────────────────────────
 
+-- ─── EDIT ME: difficulty modes (shown in the menu; scale the AI opponent) ─────
+-- Each entry: a `name` + `tagline` shown in the menu, and AI multipliers —
+-- `aiSpeed` scales how fast the AI runs and `aiKick` how hard it kicks
+-- (1.0 = normal). The list can be any length; the menu adapts.
+local DIFFICULTIES = {
+    { name = "Easy",   tagline = "Chhoti bachchi ho keya!", aiSpeed = 0.70, aiKick = 0.85 },
+    { name = "Medium", tagline = "We are Friends",          aiSpeed = 1.00, aiKick = 1.00 },
+    { name = "Hard",   tagline = "Beak your legs",          aiSpeed = 1.25, aiKick = 1.15 },
+}
+-- ─────────────────────────────────────────────────────────────────────────────
+
 local ATTR_MIN, ATTR_MAX = 1, 10
 
 local function clampAttr(v, default)
     if type(v) ~= "number" then return default end
     if v < ATTR_MIN then return ATTR_MIN end
     if v > ATTR_MAX then return ATTR_MAX end
+    return v
+end
+
+local function clampNum(v, default, lo, hi)
+    if type(v) ~= "number" then return default end
+    if v < lo then return lo end
+    if v > hi then return hi end
     return v
 end
 
@@ -66,11 +84,30 @@ local function normalizeTeam(team, teamIndex)
     return out
 end
 
+-- Coerce the difficulty list into clean, validated entries.
+local function normalizeDifficulties(list)
+    if type(list) ~= "table" or #list == 0 then
+        list = { { name = "Normal", tagline = "" } }
+    end
+    local out = {}
+    for i, d in ipairs(list) do
+        d = (type(d) == "table") and d or {}
+        out[i] = {
+            name    = (type(d.name) == "string" and d.name) or ("Level " .. i),
+            tagline = (type(d.tagline) == "string" and d.tagline) or "",
+            aiSpeed = clampNum(d.aiSpeed, 1.0, 0.3, 2.0),
+            aiKick  = clampNum(d.aiKick,  1.0, 0.3, 2.0),
+        }
+    end
+    return out
+end
+
 function Config.load()
     Config.teams = {
         [1] = normalizeTeam(TEAMS[1], 1),
         [2] = normalizeTeam(TEAMS[2], 2),
     }
+    Config.diffs = normalizeDifficulties(DIFFICULTIES)
     return Config.teams
 end
 
@@ -85,6 +122,19 @@ end
 function Config.squad(team)
     if not Config.teams then Config.load() end
     return Config.teams[team].players
+end
+
+-- The list of difficulty modes ({name, tagline, aiSpeed, aiKick}).
+function Config.difficulties()
+    if not Config.diffs then Config.load() end
+    return Config.diffs
+end
+
+-- One difficulty by index, clamped to the valid range (defaults to the first).
+function Config.difficulty(i)
+    local list = Config.difficulties()
+    i = i or 1
+    return list[math.max(1, math.min(#list, i))] or list[1]
 end
 
 return Config

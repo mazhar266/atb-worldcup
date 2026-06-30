@@ -53,13 +53,18 @@ local function memberFrac(m)
     return m.stamina / m.maxStamina
 end
 
-function Player.new(team, controlScheme)
+function Player.new(team, controlScheme, aiMods)
     -- team: 1 = left/red, 2 = right/blue
     -- controlScheme: "wasd", "arrows", or "ai"
+    -- aiMods (AI only): { speed = mul, kick = mul } from the chosen difficulty
     local self = setmetatable({}, Player)
     self.team    = team
     self.control = controlScheme
     self.radius  = RADIUS
+
+    -- Difficulty multipliers — 1.0 (no effect) for human players
+    self.aiSpeedMul = (aiMods and aiMods.speed) or 1
+    self.aiKickMul  = (aiMods and aiMods.kick)  or 1
 
     -- Build the squad from the config: each member carries its own attributes,
     -- the derived speed/kick/max-stamina, and current stamina (starting full).
@@ -209,7 +214,7 @@ function Player:update(dt, ball)
     local isMoving = len > 0
     self.moving = isMoving   -- read by the audio layer for the movement loop
     if isMoving then
-        local spd = member.speedPx * speedMul
+        local spd = member.speedPx * speedMul * self.aiSpeedMul
         self.x = self.x + (moveX / len) * spd * dt
         self.y = self.y + (moveY / len) * spd * dt
     end
@@ -239,7 +244,7 @@ function Player:update(dt, ball)
         ball.x = ball.x + nx * overlap
         ball.y = ball.y + ny * overlap
         -- Transfer some of the player's movement energy (also fatigue-scaled)
-        local effSpeed = member.speedPx * speedMul
+        local effSpeed = member.speedPx * speedMul * self.aiSpeedMul
         local relVx = ball.vx - (moveX * effSpeed)
         local relVy = ball.vy - (moveY * effSpeed)
         local dot = relVx * nx + relVy * ny
@@ -271,8 +276,9 @@ function Player:kick(ball, aimX, aimY)
         end
         local member  = self:activeMember()
         local kickMul = MIN_KICK_MUL + (1 - MIN_KICK_MUL) * self:staminaFrac()
-        -- Strength sets how far the ball travels; fatigue scales it down
-        ball:applyImpulse(nx * member.kickPower * kickMul, ny * member.kickPower * kickMul)
+        -- Strength sets how far the ball travels; fatigue and difficulty scale it
+        local power = member.kickPower * kickMul * self.aiKickMul
+        ball:applyImpulse(nx * power, ny * power)
 
         -- Kicking costs stamina and arms the cooldown
         member.stamina = math.max(0, member.stamina - KICK_COST)

@@ -7,6 +7,7 @@ local Goal    = require("src.goal")
 local UI      = require("src.ui")
 local Assets  = require("src.assets")
 local Audio   = require("src.audio")
+local Config  = require("src.config")
 
 local Game = {}
 
@@ -31,14 +32,42 @@ local timeLeft
 local isOvertime
 local goalFlashTimer
 local lastScoringTeam
-local menuOption    -- 1 = vs AI, 2 = 2 player
+local menuPage           -- "main" or "difficulty"
+local menuOption         -- selected index into the current page's list
+local mainItems          -- main-menu entries {label, action}
+local difficultyItems    -- difficulty entries {label, difficulty}
+local currentMode        -- 1 = vs AI, 2 = 2 players (of the running / last match)
+local currentDifficulty  -- difficulty index used for the AI
 
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
 
-local function createPlayers(option)
-    local p2control = (option == 1) and "ai" or "arrows"
+local function createPlayers(mode, difficulty)
     player1 = Player.new(1, "wasd")
-    player2 = Player.new(2, p2control)
+    if mode == 1 then
+        local d = Config.difficulty(difficulty)
+        player2 = Player.new(2, "ai", { speed = d.aiSpeed, kick = d.aiKick })
+    else
+        player2 = Player.new(2, "arrows")
+    end
+end
+
+-- Build the two menu screens: the main screen (Play / 2 Players) leads to the
+-- difficulty screen (one row per configured difficulty).
+local function buildMenu()
+    mainItems = {
+        { label = "Play  (1 Player vs AI)", action = "difficulty" },
+        { label = "2 Players  (local)",     action = "start2p" },
+    }
+    difficultyItems = {}
+    for i, d in ipairs(Config.difficulties()) do
+        local label = d.name
+        if d.tagline ~= "" then label = label .. "  (" .. d.tagline .. ")" end
+        difficultyItems[#difficultyItems + 1] = { label = label, difficulty = i }
+    end
+end
+
+local function menuItemsForPage()
+    return (menuPage == "difficulty") and difficultyItems or mainItems
 end
 
 -- ─── Audio scenes ──────────────────────────────────────────────────────────
@@ -68,11 +97,21 @@ local function updateMoveAudio()
                  or (player2.control ~= "ai" and player2.moving))
 end
 
-local function startMatch(option)
+-- Return to the (main) menu screen.
+local function goToMenu()
+    state      = STATE_MENU
+    menuPage   = "main"
+    menuOption = 1
+    audioMenu()
+end
+
+local function startMatch(mode, difficulty)
+    currentMode       = mode or currentMode
+    currentDifficulty = difficulty or currentDifficulty
     Goal.reset()
     ball       = Ball.new()
     isOvertime = false
-    createPlayers(option or menuOption)
+    createPlayers(currentMode, currentDifficulty)
     timeLeft = MATCH_TIME
     state    = STATE_PLAYING
     audioMatch()
@@ -93,9 +132,10 @@ function Game.load()
     Assets.load()
     Audio.load()
     UI.load()
-    menuOption = 1
-    state = STATE_MENU
-    audioMenu()
+    buildMenu()
+    currentMode       = 1
+    currentDifficulty = 1
+    goToMenu()
 end
 
 function Game.update(dt)
@@ -175,7 +215,15 @@ function Game.draw()
     love.graphics.clear()
 
     if state == STATE_MENU then
-        UI.drawMenu(menuOption)
+        if menuPage == "difficulty" then
+            UI.drawMenu(difficultyItems, menuOption,
+                "Select Difficulty  ·  it scales the AI opponent",
+                "Enter: Start    Esc: Back")
+        else
+            UI.drawMenu(mainItems, menuOption,
+                "An arcade football game",
+                "W/S or Up/Down: Navigate    Enter: Select")
+        end
         return
     end
 
@@ -206,14 +254,28 @@ end
 
 function Game.keypressed(key)
     if state == STATE_MENU then
-        if key == "up"    then menuOption = 1 end
-        if key == "down"  then menuOption = 2 end
-        if key == "w"     then menuOption = 1 end
-        if key == "s"     then menuOption = 2 end
+        local items = menuItemsForPage()
+        if key == "up"   or key == "w" then menuOption = math.max(1, menuOption - 1) end
+        if key == "down" or key == "s" then menuOption = math.min(#items, menuOption + 1) end
         if key == "return" or key == "kpenter" then
-            startMatch(menuOption)
+            local item = items[menuOption]
+            if menuPage == "difficulty" then
+                startMatch(1, item.difficulty)
+            elseif item.action == "difficulty" then
+                menuPage   = "difficulty"
+                menuOption = 1
+            elseif item.action == "start2p" then
+                startMatch(2)
+            end
         end
-        if key == "escape" then love.event.quit() end
+        if key == "escape" then
+            if menuPage == "difficulty" then
+                menuPage   = "main"
+                menuOption = 1
+            else
+                love.event.quit()
+            end
+        end
 
     elseif state == STATE_PLAYING or state == STATE_OVERTIME then
         -- Kick keys
@@ -230,8 +292,7 @@ function Game.keypressed(key)
             Audio.setMoving(false)
         end
         if key == "escape" then
-            state = STATE_MENU
-            audioMenu()
+            goToMenu()
         end
 
     elseif state == STATE_PAUSED then
@@ -241,8 +302,7 @@ function Game.keypressed(key)
         end
         if key == "r"      then startMatch() end
         if key == "escape" then
-            state = STATE_MENU
-            audioMenu()
+            goToMenu()
         end
 
     elseif state == STATE_GAMEOVER then
@@ -250,8 +310,7 @@ function Game.keypressed(key)
             startMatch()
         end
         if key == "escape" then
-            state = STATE_MENU
-            audioMenu()
+            goToMenu()
         end
     end
 end

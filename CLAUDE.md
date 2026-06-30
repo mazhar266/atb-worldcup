@@ -68,7 +68,11 @@ member currently on the pitch. Only the active member is controlled and drawn.
 
 **Per-player attributes come from a config file.** `src/config.lua` is the single source of truth: its
 `TEAMS` table (validated on load) gives every player a `name` and `speed`/`strength`/`stamina` on a 1–10
-scale, plus a per-team `name` (`Config.teamName`, shown in the HUD / goal flash / game-over). `Player.new`
+scale, plus a per-team `name` (`Config.teamName`, shown in the HUD / goal flash / game-over). A separate
+`DIFFICULTIES` table (`Config.difficulties()`) drives the difficulty screen — the menu is two screens
+(`game.lua`'s `menuPage`: `"main"` Play/2-Players → `"difficulty"` Easy/Medium/Hard). Each entry carries a
+`name`, `tagline`, and AI multipliers `aiSpeed`/`aiKick` that `game.lua` passes to the AI `Player` via
+`Player.new(..., aiMods)`, scaling only the AI's run speed and kick power. `Player.new`
 derives, per member: `speedPx` (run speed), `kickPower` (kick distance), and `maxStamina` (life capacity)
 via the `*_BASE`/`*_PER` mapping constants at the top of `src/player.lua` — edit names/stats in
 `src/config.lua`, edit the attribute→game mapping in `player.lua`. Stamina is capped at each

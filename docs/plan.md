@@ -63,6 +63,17 @@ Default rosters *(speed/strength/stamina)* — team 1 **Business** (left/red):
 Rei (7/7/8), Sahabub (8/8/9), Rifa (7/3/6); team 2 **Tech** (right/blue):
 Mazhar (5/10/6), Swapon (7/8/8), Sadia (10/2/6).
 
+### Difficulty modes
+
+A `DIFFICULTIES` list in `src/config.lua` defines the difficulty modes: each has
+a `name`, a `tagline` (both shown in the menu), and AI multipliers `aiSpeed` /
+`aiKick`. The menu is **two screens** (`menuPage` in `game.lua` = `"main"` →
+`"difficulty"`): the main screen offers *Play (1 Player vs AI)* and *2 Players*,
+and choosing Play opens the difficulty screen built from `Config.difficulties()`
+(Esc goes back). The chosen `{aiSpeed, aiKick}` are passed to the AI `Player`
+(`Player.new`'s `aiMods`), scaling only the AI's run speed and kick power — human
+players are unaffected. Defaults: Easy 0.70/0.85, Medium 1.0/1.0, Hard 1.25/1.15.
+
 ### Visual Style
 
 - Generated pixel-art sprites with shape-based fallback (sprites live in `assets/` and are optional)
@@ -145,7 +156,7 @@ MENU  ──(Enter)──►  PLAYING  ──(P)──►  PAUSED
 
 ### Phase 5 – AI Opponent (Future)
 - [ ] Smarter rule-based AI: positioning, defending, anticipating the ball
-- [ ] Difficulty selector on menu (Easy / Medium / Hard)
+- [x] Difficulty selector on menu (Easy / Medium / Hard) — config-driven names + taglines, scaling the AI's `aiSpeed` / `aiKick`
 - [ ] Optional sprint key (hold to move faster, drains stamina quicker)
 - [ ] Limited substitution count per match (more sim-like)
 

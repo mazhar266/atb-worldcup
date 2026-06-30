@@ -208,7 +208,7 @@ end
 
 -- ─── Menu screen ────────────────────────────────────────────────────────────
 
-function UI.drawMenu(menuOption)
+function UI.drawMenu(items, selected, subtitle, navLine)
     -- Dark full-screen overlay
     love.graphics.setColor(0.05, 0.15, 0.05)
     love.graphics.rectangle("fill", 0, 0, 800, 600)
@@ -230,37 +230,40 @@ function UI.drawMenu(menuOption)
     -- Subtitle
     love.graphics.setFont(fontSmall)
     love.graphics.setColor(COL_WHITE)
-    local sub = "An arcade football game"
+    local sub = subtitle or "An arcade football game"
     local sw  = fontSmall:getWidth(sub)
     love.graphics.print(sub, (800 - sw) / 2, 136)
 
-    -- Mode selector
+    -- Selectable options (difficulties + 2-player), driven by config
     love.graphics.setFont(fontMedium)
-    local options = {"1 Player  (vs AI)", "2 Players  (local)"}
-    for i, opt in ipairs(options) do
-        if i == menuOption then
+    local startY  = 196
+    local spacing = 40
+    for i, item in ipairs(items) do
+        local y = startY + (i - 1) * spacing
+        if i == selected then
             love.graphics.setColor(COL_YELLOW)
-            love.graphics.print("> " .. opt, 280, 220 + (i - 1) * 50)
+            love.graphics.print("> " .. item.label, 150, y)
         else
             love.graphics.setColor(0.7, 0.7, 0.7)
-            love.graphics.print("  " .. opt, 280, 220 + (i - 1) * 50)
+            love.graphics.print("  " .. item.label, 150, y)
         end
     end
 
-    -- Instructions
+    -- Instructions (below the options list)
     love.graphics.setFont(fontSmall)
     love.graphics.setColor(0.6, 0.6, 0.6)
     local lines = {
-        "W/S or Up/Down: Navigate    Enter: Select",
+        navLine or "W/S or Up/Down: Navigate    Enter: Select",
         "",
         "P1: WASD move  ·  F kick  ·  Q substitute",
         "P2: Arrows move  ·  L kick  ·  K substitute",
         "",
         "Players tire as they run — sub on fresh legs!",
     }
+    local instrY = startY + #items * spacing + 24
     for i, line in ipairs(lines) do
         local lw = fontSmall:getWidth(line)
-        love.graphics.print(line, (800 - lw) / 2, 360 + (i - 1) * 22)
+        love.graphics.print(line, (800 - lw) / 2, instrY + (i - 1) * 22)
     end
 end
 
